@@ -1,4 +1,3 @@
-#![feature(core_ffi_c)]
 #![no_std]
 
 pub mod cgroup_connect4;
