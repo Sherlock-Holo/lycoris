@@ -1,5 +1,6 @@
 use std::io::{Error as IoError, ErrorKind};
 
+use h2::Reason;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -25,6 +26,19 @@ pub fn h2_err_to_io_err(err: h2::Error) -> IoError {
     if err.is_io() {
         err.into_io().unwrap()
     } else {
-        IoError::new(ErrorKind::Other, err)
+        let reason = if let Some(reason) = err.reason() {
+            reason
+        } else {
+            return IoError::new(ErrorKind::Other, err);
+        };
+
+        match reason {
+            Reason::NO_ERROR | Reason::CONNECT_ERROR => IoError::from(ErrorKind::BrokenPipe),
+            Reason::PROTOCOL_ERROR | Reason::COMPRESSION_ERROR | Reason::FRAME_SIZE_ERROR => {
+                IoError::from(ErrorKind::InvalidData)
+            }
+
+            reason => IoError::new(ErrorKind::Other, reason.description()),
+        }
     }
 }

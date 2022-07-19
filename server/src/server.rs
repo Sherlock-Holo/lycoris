@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use bytes::Bytes;
-use futures_util::{StreamExt, TryStreamExt};
+use futures_util::StreamExt;
 use h2::server::SendResponse;
 use h2::{Reason, RecvStream};
 use http::{Request, Response};
@@ -11,10 +11,9 @@ use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 use tracing::{error, info};
 
+use crate::async_read_recv_stream::AsyncReadRecvStream;
 use crate::async_write_send_stream::AsyncWriteSendStream;
 use crate::auth::Auth;
-use crate::byte_stream::ByteStream;
-use crate::err::h2_err_to_io_err;
 use crate::h2_connection::Connection;
 use crate::{parse, proxy, Error};
 
@@ -99,7 +98,7 @@ impl Server {
 
                         proxy::proxy(
                             remote_addr,
-                            ByteStream::new(in_stream.map_err(h2_err_to_io_err)),
+                            AsyncReadRecvStream::new(in_stream),
                             AsyncWriteSendStream::new(h2_send_stream),
                         )
                         .await?;
