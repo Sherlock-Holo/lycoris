@@ -14,6 +14,7 @@ pub trait LimitedRecvStream: Stream {
 }
 
 impl LimitedRecvStream for RecvStream {
+    #[inline]
     fn release_capacity(&mut self, size: usize) -> io::Result<()> {
         self.flow_control()
             .release_capacity(size)
@@ -79,11 +80,7 @@ mod tests {
 
     struct WrapperStream<S>(S);
 
-    impl<B, S> Stream for WrapperStream<S>
-    where
-        B: Deref<Target = [u8]>,
-        S: Stream<Item = Result<B, h2::Error>> + Unpin,
-    {
+    impl<S: Stream + Unpin> Stream for WrapperStream<S> {
         type Item = S::Item;
 
         fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -91,11 +88,7 @@ mod tests {
         }
     }
 
-    impl<B, S> LimitedRecvStream for WrapperStream<S>
-    where
-        B: Deref<Target = [u8]>,
-        S: Stream<Item = Result<B, h2::Error>> + Unpin,
-    {
+    impl<S: Stream + Unpin> LimitedRecvStream for WrapperStream<S> {
         fn release_capacity(&mut self, _size: usize) -> io::Result<()> {
             Ok(())
         }
