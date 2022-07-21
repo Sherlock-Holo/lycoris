@@ -1,3 +1,4 @@
+use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -7,8 +8,9 @@ use h2::server::SendResponse;
 use h2::{Reason, RecvStream};
 use http::{Request, Response};
 use tap::TapFallible;
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::TlsAcceptor;
+use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 use tracing::{error, info};
 
 use crate::async_read_recv_stream::AsyncReadRecvStream;
@@ -76,34 +78,7 @@ impl Server {
                     let token_auth = token_auth.clone();
 
                     tokio::spawn(async move {
-                        let auth_result =
-                            auth(&token_header, &mut h2_request, &mut h2_respond, &token_auth)?;
-                        if !auth_result {
-                            h2_respond.send_reset(Reason::REFUSED_STREAM);
-
-                            return Err(Error::AuthFailed);
-                        }
-
-                        info!("token auth pass");
-
-                        let mut in_stream = h2_request.into_body();
-
-                        let remote_addr = get_remote_addr(&mut in_stream).await?;
-
-                        info!(%remote_addr, "get remote addr done");
-
-                        let h2_send_stream = h2_respond
-                            .send_response(Response::new(()), false)
-                            .tap_err(|err| error!(%err, "send dummy response failed"))?;
-
-                        proxy::proxy(
-                            remote_addr,
-                            AsyncReadRecvStream::new(in_stream),
-                            AsyncWriteSendStream::new(h2_send_stream),
-                        )
-                        .await?;
-
-                        Ok::<_, Error>(())
+                        handle_h2_stream(h2_request, h2_respond, &token_header, &token_auth).await
                     });
                 }
 
@@ -155,4 +130,66 @@ async fn get_remote_addr(in_stream: &mut RecvStream) -> Result<SocketAddr, Error
     info!("receive address data done");
 
     parse::parse_addr(&data)
+}
+
+async fn handle_h2_stream(
+    mut h2_request: Request<RecvStream>,
+    mut h2_respond: SendResponse<Bytes>,
+    token_header: &str,
+    token_auth: &Auth,
+) -> Result<(), Error> {
+    let auth_result = auth(token_header, &mut h2_request, &mut h2_respond, token_auth)?;
+    if !auth_result {
+        h2_respond.send_reset(Reason::REFUSED_STREAM);
+
+        return Err(Error::AuthFailed);
+    }
+
+    info!("token auth pass");
+
+    let mut in_stream = h2_request.into_body();
+
+    let remote_addr = get_remote_addr(&mut in_stream).await?;
+
+    info!(%remote_addr, "get remote addr done");
+
+    let mut h2_send_stream = h2_respond
+        .send_response(Response::new(()), false)
+        .tap_err(|err| error!(%err, "send dummy response failed"))?;
+
+    let remote_tcp_stream = match TcpStream::connect(remote_addr).await {
+        Err(err) => {
+            error!(%err, %remote_addr, "connect to target failed");
+
+            let reason = match err.kind() {
+                ErrorKind::ConnectionRefused | ErrorKind::ConnectionAborted => {
+                    Reason::REFUSED_STREAM
+                }
+                ErrorKind::TimedOut => Reason::SETTINGS_TIMEOUT,
+                ErrorKind::Interrupted => Reason::CANCEL,
+
+                _ => Reason::INTERNAL_ERROR,
+            };
+
+            h2_send_stream.send_reset(reason);
+
+            return Err(err.into());
+        }
+
+        Ok(remote_tcp_stream) => remote_tcp_stream,
+    };
+
+    info!(%remote_addr, "connect to remote done");
+
+    let (remote_in_tcp, remote_out_tcp) = remote_tcp_stream.into_split();
+
+    proxy::proxy(
+        remote_in_tcp.compat(),
+        remote_out_tcp.compat_write(),
+        AsyncReadRecvStream::new(in_stream),
+        AsyncWriteSendStream::new(h2_send_stream),
+    )
+    .await?;
+
+    Ok::<_, Error>(())
 }

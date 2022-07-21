@@ -1,39 +1,31 @@
 use std::io::Error;
-use std::net::SocketAddr;
 
 use futures_util::{io, try_join, FutureExt};
 use futures_util::{AsyncRead, AsyncWrite};
 use tap::TapFallible;
-use tokio::net::TcpStream;
-use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
-use tracing::{error, info};
+use tracing::error;
 
-/// connect to remote by addr, then copy data from in_stream to remote and copy data from remote to
-/// out_stream
-pub async fn proxy<IN, OUT>(
-    addr: SocketAddr,
-    in_stream: IN,
-    mut out_stream: OUT,
+/// copy data from in_stream to remote_tcp and copy data from remote_tcp to out_stream
+pub async fn proxy<RemoteIn, RemoteOut, ClientIn, ClientOut>(
+    remote_in_stream: RemoteIn,
+    mut remote_out_stream: RemoteOut,
+    client_in_stream: ClientIn,
+    mut client_out_stream: ClientOut,
 ) -> Result<(), Error>
 where
-    IN: AsyncRead + Unpin + Send + 'static,
-    OUT: AsyncWrite + Unpin + Send + 'static,
+    RemoteIn: AsyncRead + Unpin + Send + 'static,
+    RemoteOut: AsyncWrite + Unpin + Send + 'static,
+    ClientIn: AsyncRead + Unpin + Send + 'static,
+    ClientOut: AsyncWrite + Unpin + Send + 'static,
 {
-    let tcp_stream = TcpStream::connect(addr)
-        .await
-        .tap_err(|err| error!(%err, %addr, "connect to target failed"))?;
-    let (tcp_stream_rx, tcp_stream_tx) = tcp_stream.into_split();
-
-    info!(%addr, "connect to target done");
-
     let task1 = tokio::spawn(async move {
-        io::copy(in_stream, &mut tcp_stream_tx.compat_write())
+        io::copy(client_in_stream, &mut remote_out_stream)
             .await
             .tap_err(|err| error!(%err, "copy data from in_stream to tcp failed"))
     })
     .map(|task| task.unwrap());
     let task2 = tokio::spawn(async move {
-        io::copy(tcp_stream_rx.compat(), &mut out_stream)
+        io::copy(remote_in_stream, &mut client_out_stream)
             .await
             .tap_err(|err| error!(%err, "copy data from tcp to out_stream failed"))
     })
@@ -52,7 +44,8 @@ mod tests {
 
     use futures_util::io::Cursor;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    use tokio::net::TcpListener;
+    use tokio::net::{TcpListener, TcpStream};
+    use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
     use super::*;
 
@@ -92,7 +85,18 @@ mod tests {
         };
         let watch = out_stream.clone();
 
-        let task = tokio::spawn(async move { proxy(addr, in_stream, out_stream).await });
+        let task = tokio::spawn(async move {
+            let tcp_stream = TcpStream::connect(addr).await.unwrap();
+            let (tcp_in_stream, tcp_out_stream) = tcp_stream.into_split();
+
+            proxy(
+                tcp_in_stream.compat(),
+                tcp_out_stream.compat_write(),
+                in_stream,
+                out_stream,
+            )
+            .await
+        });
 
         let (mut tcp_stream, _) = listener.accept().await.unwrap();
 
