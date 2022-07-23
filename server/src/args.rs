@@ -6,5 +6,5 @@ use clap::Parser;
 pub struct Args {
     /// config path
     #[clap(short, long)]
-    config: PathBuf,
+    pub config: PathBuf,
 }

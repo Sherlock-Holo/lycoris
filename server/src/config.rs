@@ -5,9 +5,10 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    key: PathBuf,
-    cert: PathBuf,
-    domain: Option<String>,
-    listen_addr: SocketAddr,
-    totp_secret: String,
+    pub key: PathBuf,
+    pub cert: PathBuf,
+    pub domain: Option<String>,
+    pub listen_addr: SocketAddr,
+    pub totp_secret: String,
+    pub token_header: String,
 }

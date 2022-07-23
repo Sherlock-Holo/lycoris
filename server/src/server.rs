@@ -72,7 +72,7 @@ impl Server {
                 info!("h2 connection handshake done");
 
                 while let Some(h2_stream) = h2_connection.accept_h2_stream().await {
-                    let (mut h2_request, mut h2_respond) = h2_stream?;
+                    let (h2_request, h2_respond) = h2_stream?;
 
                     let token_header = token_header.clone();
                     let token_auth = token_auth.clone();
