@@ -1,6 +1,7 @@
 use std::io::Error;
 
-use futures_util::{io, try_join, FutureExt};
+use futures_util::future::{AbortHandle, Abortable, Either};
+use futures_util::{future, io, AsyncWriteExt, FutureExt};
 use futures_util::{AsyncRead, AsyncWrite};
 use tap::TapFallible;
 use tracing::error;
@@ -18,22 +19,59 @@ where
     ClientIn: AsyncRead + Unpin + Send + 'static,
     ClientOut: AsyncWrite + Unpin + Send + 'static,
 {
+    let (abort_handle1, abort_registration) = AbortHandle::new_pair();
+
     let task1 = tokio::spawn(async move {
-        io::copy(client_in_stream, &mut remote_out_stream)
-            .await
-            .tap_err(|err| error!(%err, "copy data from in_stream to tcp failed"))
+        if let Ok(Err(err)) = Abortable::new(
+            async {
+                io::copy(client_in_stream, &mut remote_out_stream)
+                    .await
+                    .tap_err(|err| error!(%err, "copy data from in_stream to tcp failed"))
+            },
+            abort_registration,
+        )
+        .await
+        {
+            return Err(err);
+        }
+
+        remote_out_stream.close().await?;
+
+        Ok::<_, Error>(())
     })
     .map(|task| task.unwrap());
+
+    let (abort_handle2, abort_registration) = AbortHandle::new_pair();
+
     let task2 = tokio::spawn(async move {
-        io::copy(remote_in_stream, &mut client_out_stream)
-            .await
-            .tap_err(|err| error!(%err, "copy data from tcp to out_stream failed"))
+        if let Ok(Err(err)) = Abortable::new(
+            async {
+                io::copy(remote_in_stream, &mut client_out_stream)
+                    .await
+                    .tap_err(|err| error!(%err, "copy data from tcp to out_stream failed"))
+            },
+            abort_registration,
+        )
+        .await
+        {
+            return Err(err);
+        }
+
+        client_out_stream.close().await?;
+
+        Ok::<_, Error>(())
     })
     .map(|task| task.unwrap());
 
-    try_join!(task1, task2)?;
+    let result = future::try_select(task1, task2).await;
 
-    Ok(())
+    abort_handle1.abort();
+    abort_handle2.abort();
+
+    match result {
+        Err(Either::Left((err, _))) | Err(Either::Right((err, _))) => Err(err),
+        _ => Ok(()),
+    }
 }
 
 #[cfg(test)]

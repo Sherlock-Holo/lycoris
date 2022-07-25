@@ -1,12 +1,9 @@
+use std::io;
 use std::path::Path;
 use std::sync::Arc;
 
 use args::Args;
-use auth::Auth;
 use clap::Parser;
-use config::Config;
-pub use err::Error;
-use server::Server;
 use tokio::fs;
 use tokio::net::TcpListener;
 use tokio_rustls::rustls::{Certificate, PrivateKey, ServerConfig};
@@ -15,6 +12,11 @@ use tracing::level_filters::LevelFilter;
 use tracing::{info, subscriber};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{fmt, Registry};
+
+pub use crate::auth::Auth;
+use crate::config::Config;
+pub use crate::err::Error;
+pub use crate::server::Server;
 
 mod args;
 mod async_read_recv_stream;
@@ -55,7 +57,7 @@ pub async fn run() -> Result<(), Error> {
     server.start().await
 }
 
-pub async fn load_certs(path: &Path) -> Result<Vec<Certificate>, Error> {
+async fn load_certs(path: &Path) -> Result<Vec<Certificate>, Error> {
     let certs = fs::read(path).await?;
     let mut certs =
         rustls_pemfile::certs(&mut certs.as_slice()).map_err(|err| Error::Other(err.into()))?;
@@ -63,7 +65,7 @@ pub async fn load_certs(path: &Path) -> Result<Vec<Certificate>, Error> {
     Ok(certs.drain(..).map(Certificate).collect())
 }
 
-pub async fn load_keys(path: &Path) -> Result<Vec<PrivateKey>, Error> {
+async fn load_keys(path: &Path) -> Result<Vec<PrivateKey>, Error> {
     let keys = fs::read(path).await?;
     let mut keys = rustls_pemfile::rsa_private_keys(&mut keys.as_slice())
         .map_err(|err| Error::Other(err.into()))?;
@@ -71,8 +73,11 @@ pub async fn load_keys(path: &Path) -> Result<Vec<PrivateKey>, Error> {
     Ok(keys.drain(..).map(PrivateKey).collect())
 }
 
-pub fn init_log() {
-    let layer = fmt::layer().pretty().with_target(true);
+fn init_log() {
+    let layer = fmt::layer()
+        .pretty()
+        .with_target(true)
+        .with_writer(io::stderr);
     let layered = Registry::default().with(layer).with(LevelFilter::INFO);
 
     subscriber::set_global_default(layered).unwrap();

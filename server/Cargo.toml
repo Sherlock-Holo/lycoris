@@ -25,7 +25,7 @@ h2 = { version = "0.3", features = ["stream"] }
 http = "0.2"
 
 # tls
-tokio-rustls = { version = "0.23", features = ["early-data"] }
+tokio-rustls = "0.23"
 rustls-pemfile = "1"
 
 # config and args

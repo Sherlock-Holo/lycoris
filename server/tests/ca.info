@@ -1,0 +1,8 @@
+cn = "CA"
+organization = "test"
+serial = 1
+ca
+signing_key
+cert_signing_key
+crl_signing_key
+expiration_days = 3650

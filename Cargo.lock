@@ -170,14 +170,7 @@ dependencies = [
  "aya-bpf",
  "aya-log-ebpf",
  "bindgen",
- "bridge",
-]
-
-[[package]]
-name = "bridge"
-version = "0.1.0"
-dependencies = [
- "aya",
+ "share",
 ]
 
 [[package]]
@@ -890,6 +883,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "900fba806f70c630b0a382d0d825e17a0f19fcd059a2ade1ff237bcddf446b31"
 dependencies = [
  "lazy_static",
+]
+
+[[package]]
+name = "share"
+version = "0.1.0"
+dependencies = [
+ "aya",
 ]
 
 [[package]]

@@ -4,6 +4,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use crate::Error;
 
 /// parse addr from data
+/// the data format is \[addr_type:1,addr:variant,port:2\]
 pub fn parse_addr(mut data: &[u8]) -> Result<SocketAddr, Error> {
     if data.is_empty() {
         return Err(Error::AddrNotEnough);
