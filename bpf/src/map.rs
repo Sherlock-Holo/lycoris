@@ -1,7 +1,7 @@
 use aya_bpf::bindings::BPF_F_NO_PREALLOC;
 use aya_bpf::macros::map;
 use aya_bpf::maps::{Array, LpmTrie, LruHashMap};
-use bridge::{ConnectedIpv4Addr, Ipv4Addr};
+use share::{ConnectedIpv4Addr, Ipv4Addr};
 
 #[map]
 /// key is socket cookie, value is origin dst ipv4 addr

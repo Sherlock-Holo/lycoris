@@ -4,7 +4,7 @@ use aya_bpf::helpers::*;
 use aya_bpf::maps::lpm_trie::Key;
 use aya_bpf::programs::SockAddrContext;
 use aya_log_ebpf::debug;
-use bridge::Ipv4Addr;
+use share::Ipv4Addr;
 
 use crate::kernel_binding::require;
 use crate::map::*;

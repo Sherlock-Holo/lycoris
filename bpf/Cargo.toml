@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 aya-bpf = { git = "https://github.com/aya-rs/aya", branch = "main" }
 aya-log-ebpf = { git = "https://github.com/aya-rs/aya-log", branch = "main" }
-bridge = { path = "../bridge" }
+share = { path = "../share" }
 
 [build-dependencies]
 bindgen = "0.60"

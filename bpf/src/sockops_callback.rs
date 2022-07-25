@@ -4,7 +4,7 @@ use aya_bpf::bindings::BPF_SOCK_OPS_ACTIVE_ESTABLISHED_CB;
 use aya_bpf::helpers::*;
 use aya_bpf::programs::SockOpsContext;
 use aya_log_ebpf::debug;
-use bridge::{ConnectedIpv4Addr, Ipv4Addr};
+use share::{ConnectedIpv4Addr, Ipv4Addr};
 
 use crate::kernel_binding::require::AF_INET;
 use crate::map::*;
