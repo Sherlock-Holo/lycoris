@@ -2,7 +2,7 @@
 
 #[repr(C)]
 #[derive(Copy, Clone)]
-#[cfg_attr(feature = "userspace", derive(Debug))]
+#[cfg_attr(feature = "userspace", derive(Debug, Hash, Eq, PartialEq))]
 pub struct ConnectedIpv4Addr {
     pub sport: u16,
     pub dport: u16,

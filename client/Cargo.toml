@@ -6,3 +6,33 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+thiserror = "1"
+bytes = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "fs", "sync", "time"] }
+tokio-util = { version = "0.7", features = ["compat"] }
+futures-util = { version = "0.3", features = ["io"] }
+tap = "1"
+
+# log
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# auth
+totp-rs = "2"
+
+# http/2
+h2 = { version = "0.3", features = ["stream"] }
+http = "0.2"
+
+# tls
+tokio-rustls = "0.23"
+rustls-pemfile = "1"
+
+# config and args
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.8"
+clap = { version = "3", features = ["derive", "color", "suggestions"] }
+
+# bpf
+aya = { version = "0.11", features = ["async_tokio"] }
+share = { path = "../share", features = ["userspace"] }
