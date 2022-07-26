@@ -18,6 +18,7 @@ use crate::config::Config;
 pub use crate::err::Error;
 pub use crate::server::Server;
 
+mod addr;
 mod args;
 mod async_read_recv_stream;
 mod async_write_send_stream;
@@ -25,7 +26,6 @@ mod auth;
 mod config;
 mod err;
 mod h2_connection;
-mod parse;
 mod proxy;
 mod server;
 

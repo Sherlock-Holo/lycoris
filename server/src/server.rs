@@ -17,7 +17,7 @@ use crate::async_read_recv_stream::AsyncReadRecvStream;
 use crate::async_write_send_stream::AsyncWriteSendStream;
 use crate::auth::Auth;
 use crate::h2_connection::Connection;
-use crate::{parse, proxy, Error};
+use crate::{addr, proxy, Error};
 
 pub struct Server {
     token_header: Arc<str>,
@@ -129,7 +129,7 @@ async fn get_remote_addr(in_stream: &mut RecvStream) -> Result<SocketAddr, Error
 
     info!("receive address data done");
 
-    parse::parse_addr(&data)
+    addr::parse_addr(&data)
 }
 
 async fn handle_h2_stream(
