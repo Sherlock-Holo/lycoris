@@ -1,6 +1,5 @@
 use std::io::Error;
 
-use futures_util::future::{AbortHandle, Abortable, Either};
 use futures_util::{future, io, AsyncWriteExt, FutureExt};
 use futures_util::{AsyncRead, AsyncWrite};
 use tap::TapFallible;
@@ -19,59 +18,27 @@ where
     ClientIn: AsyncRead + Unpin + Send + 'static,
     ClientOut: AsyncWrite + Unpin + Send + 'static,
 {
-    let (abort_handle1, abort_registration) = AbortHandle::new_pair();
-
     let task1 = tokio::spawn(async move {
-        if let Ok(Err(err)) = Abortable::new(
-            async {
-                io::copy(client_in_stream, &mut remote_out_stream)
-                    .await
-                    .tap_err(|err| error!(%err, "copy data from in_stream to tcp failed"))
-            },
-            abort_registration,
-        )
-        .await
-        {
-            return Err(err);
-        }
+        io::copy(client_in_stream, &mut remote_out_stream)
+            .await
+            .tap_err(|err| error!(%err, "copy data from in_stream to tcp failed"))?;
 
-        remote_out_stream.close().await?;
-
-        Ok::<_, Error>(())
+        remote_out_stream.close().await
     })
     .map(|task| task.unwrap());
-
-    let (abort_handle2, abort_registration) = AbortHandle::new_pair();
 
     let task2 = tokio::spawn(async move {
-        if let Ok(Err(err)) = Abortable::new(
-            async {
-                io::copy(remote_in_stream, &mut client_out_stream)
-                    .await
-                    .tap_err(|err| error!(%err, "copy data from tcp to out_stream failed"))
-            },
-            abort_registration,
-        )
-        .await
-        {
-            return Err(err);
-        }
+        io::copy(remote_in_stream, &mut client_out_stream)
+            .await
+            .tap_err(|err| error!(%err, "copy data from tcp to out_stream failed"))?;
 
-        client_out_stream.close().await?;
-
-        Ok::<_, Error>(())
+        client_out_stream.close().await
     })
     .map(|task| task.unwrap());
 
-    let result = future::try_select(task1, task2).await;
+    future::try_join(task1, task2).await?;
 
-    abort_handle1.abort();
-    abort_handle2.abort();
-
-    match result {
-        Err(Either::Left((err, _))) | Err(Either::Right((err, _))) => Err(err),
-        _ => Ok(()),
-    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -138,12 +105,12 @@ mod tests {
 
         let (mut tcp_stream, _) = listener.accept().await.unwrap();
 
-        tcp_stream.write_all(b"test").await.unwrap();
-
         let mut buf = vec![0; 3];
 
         tcp_stream.read_exact(&mut buf).await.unwrap();
         assert_eq!(buf, [1, 2, 3]);
+
+        tcp_stream.write_all(b"test").await.unwrap();
 
         drop(tcp_stream);
 

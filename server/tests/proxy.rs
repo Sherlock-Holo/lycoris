@@ -94,11 +94,8 @@ async fn main() {
 
         accepted_stream.read_exact(&mut buf).await.unwrap();
 
-        debug!("{}", String::from_utf8_lossy(&buf));
-
+        assert_eq!(&buf, b"test");
         assert_eq!(accepted_stream.read(&mut [0; 1]).await.unwrap(), 0);
-
-        accepted_stream.shutdown().await
     });
 
     let remote_ip = if let IpAddr::V4(remote_ip) = remote_addr.ip() {
@@ -126,7 +123,7 @@ async fn main() {
     let mut recv_stream = recv_stream.into_body();
 
     let data = recv_stream.next().await.unwrap().unwrap();
-    debug!("{}", String::from_utf8_lossy(&data));
+    assert_eq!(data.as_ref(), b"test");
 
     recv_stream
         .flow_control()
@@ -148,7 +145,7 @@ async fn main() {
 
     debug!("send trailers done");
 
-    task.await.unwrap().unwrap();
+    task.await.unwrap();
 
     debug!("task done");
 

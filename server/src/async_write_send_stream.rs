@@ -147,11 +147,7 @@ impl<S: LimitedSendStream<Bytes> + Unpin> AsyncWrite for AsyncWriteSendStream<S>
         // check peer close or not
         self.check_reset(cx)?;
 
-        if ready!(self.0.poll_capacity(cx)).is_some() {
-            Poll::Ready(Ok(()))
-        } else {
-            Poll::Ready(Err(io::Error::from(ErrorKind::UnexpectedEof)))
-        }
+        Poll::Ready(Ok(()))
     }
 
     fn poll_close(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
