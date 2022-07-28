@@ -1,4 +1,10 @@
-#![no_std]
+#[cfg(feature = "userspace")]
+pub mod async_read_recv_stream;
+#[cfg(feature = "userspace")]
+pub mod async_write_send_stream;
+#[cfg_attr(not(feature = "userspace"), no_std)]
+#[cfg(feature = "userspace")]
+pub mod helper;
 
 #[repr(C)]
 #[derive(Copy, Clone)]

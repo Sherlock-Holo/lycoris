@@ -7,14 +7,14 @@ use futures_util::StreamExt;
 use h2::server::SendResponse;
 use h2::{Reason, RecvStream};
 use http::{Request, Response};
+use share::async_read_recv_stream::AsyncReadRecvStream;
+use share::async_write_send_stream::AsyncWriteSendStream;
 use tap::TapFallible;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::TlsAcceptor;
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 use tracing::{error, info};
 
-use crate::async_read_recv_stream::AsyncReadRecvStream;
-use crate::async_write_send_stream::AsyncWriteSendStream;
 use crate::auth::Auth;
 use crate::h2_connection::Connection;
 use crate::{addr, proxy, Error};

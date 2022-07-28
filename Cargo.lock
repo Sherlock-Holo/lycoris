@@ -852,22 +852,23 @@ dependencies = [
 name = "server"
 version = "0.1.0"
 dependencies = [
- "bytes",
- "clap",
- "futures-util",
- "h2",
- "http",
- "rustls-pemfile",
- "serde",
- "serde_yaml",
- "tap",
- "thiserror",
- "tokio",
- "tokio-rustls",
- "tokio-util",
- "totp-rs",
- "tracing",
- "tracing-subscriber",
+    "bytes",
+    "clap",
+    "futures-util",
+    "h2",
+    "http",
+    "rustls-pemfile",
+    "serde",
+    "serde_yaml",
+    "share",
+    "tap",
+    "thiserror",
+    "tokio",
+    "tokio-rustls",
+    "tokio-util",
+    "totp-rs",
+    "tracing",
+    "tracing-subscriber",
 ]
 
 [[package]]
@@ -905,7 +906,12 @@ dependencies = [
 name = "share"
 version = "0.1.0"
 dependencies = [
- "aya",
+    "aya",
+    "bytes",
+    "futures-util",
+    "h2",
+    "http",
+    "tokio",
 ]
 
 [[package]]

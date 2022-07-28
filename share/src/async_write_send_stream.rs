@@ -8,7 +8,7 @@ use futures_util::{ready, AsyncWrite};
 use h2::{Reason, SendStream};
 use http::HeaderMap;
 
-use crate::err::h2_err_to_io_err;
+use crate::helper::h2_err_to_io_err;
 
 pub trait LimitedSendStream<B: Buf> {
     fn reserve_capacity(&mut self, capacity: usize);

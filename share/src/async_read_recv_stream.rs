@@ -7,7 +7,7 @@ use bytes::{Buf, BufMut, BytesMut};
 use futures_util::{ready, AsyncRead, Stream, StreamExt};
 use h2::RecvStream;
 
-use crate::err::h2_err_to_io_err;
+use crate::helper::h2_err_to_io_err;
 
 pub trait LimitedRecvStream: Stream {
     fn release_capacity(&mut self, size: usize) -> io::Result<()>;
