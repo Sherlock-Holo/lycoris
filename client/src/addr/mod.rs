@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 
 use bytes::{BufMut, Bytes, BytesMut};
+pub use dst_addr::DstAddrLookup;
 
 mod dst_addr;
 
