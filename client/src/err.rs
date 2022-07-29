@@ -16,4 +16,13 @@ pub enum Error {
 
     #[error("parse config failed: {0}")]
     Config(#[from] serde_yaml::Error),
+
+    #[error("build auth failed: {0:?}")]
+    Auth(totp_rs::TotpUrlError),
+}
+
+impl From<totp_rs::TotpUrlError> for Error {
+    fn from(err: totp_rs::TotpUrlError) -> Self {
+        Self::Auth(err)
+    }
 }
