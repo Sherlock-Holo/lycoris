@@ -2,16 +2,22 @@ use std::any::Any;
 use std::io;
 use std::net::SocketAddr;
 use std::path::Path;
+use std::str::FromStr;
 
+use aya::maps::lpm_trie::{Key, LpmTrie};
 use aya::maps::Array;
 use aya::programs::cgroup_sock_addr::CgroupSockAddrLink;
 use aya::programs::{CgroupSockAddr, OwnedLink, SockOps};
 use aya::{Bpf, BpfLoader, Btf};
+use cidr::Ipv4Inet;
 use clap::Parser;
+use futures_util::io::BufReader;
+use futures_util::{AsyncBufReadExt, StreamExt};
 use tokio::fs;
 use tokio::fs::File;
 use tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
 use tokio_rustls::webpki::TrustAnchor;
+use tokio_util::compat::TokioAsyncReadCompatExt;
 use tracing::level_filters::LevelFilter;
 use tracing::{info, subscriber};
 use tracing_subscriber::layer::SubscriberExt;
@@ -56,7 +62,9 @@ pub async fn run() -> Result<(), Error> {
 
     info!(listen_addr = %config.listen_addr, "set proxy addr done");
 
-    // TODO insert target map
+    load_target_ip(&mut bpf, &args.ip_list).await?;
+
+    info!("load target ip done");
 
     let _connect4_link = load_connect4(&mut bpf, &config.cgroup_path).await?;
 
@@ -219,6 +227,32 @@ async fn load_connector(
         token_generator,
         token_header,
     )
+}
+
+async fn load_target_ip(bpf: &mut Bpf, ip_list: &Path) -> Result<(), Error> {
+    let proxy_ipv4_list: LpmTrie<_, [u8; 4], u8> = bpf
+        .map_mut("PROXY_IPV4_LIST")
+        .expect("PROXY_IPV4_LIST not found")
+        .try_into()?;
+    let ip_list = File::open(ip_list).await?;
+    let mut reader = BufReader::new(ip_list.compat()).lines();
+
+    while let Some(result) = reader.next().await {
+        let line = result?;
+
+        let ipv4_inet = Ipv4Inet::from_str(&line).map_err(|err| Error::Other(err.into()))?;
+
+        proxy_ipv4_list.insert(
+            &Key::new(
+                ipv4_inet.network_length() as _,
+                ipv4_inet.first_address().octets(),
+            ),
+            1,
+            0,
+        )?;
+    }
+
+    Ok(())
 }
 
 fn init_log() {

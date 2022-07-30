@@ -11,4 +11,8 @@ pub struct Args {
     /// bpf elf path
     #[clap(short, long)]
     pub bpf_elf: PathBuf,
+
+    /// proxy ip list path
+    #[clap(short, long)]
+    pub ip_list: PathBuf,
 }
