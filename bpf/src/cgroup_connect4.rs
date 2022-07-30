@@ -4,10 +4,10 @@ use aya_bpf::helpers::*;
 use aya_bpf::maps::lpm_trie::Key;
 use aya_bpf::programs::SockAddrContext;
 use aya_log_ebpf::debug;
-use share::Ipv4Addr;
 
 use crate::kernel_binding::require;
 use crate::map::*;
+use crate::Ipv4Addr;
 
 /// check connect ipv4 in proxy ipv4 list or not, if in list, save the origin dst ipv4 addr into
 /// DST_IPV4_ADDR_STORE with (cookie, origin_dst_ipv4_addr), otherwise let it connect directly

@@ -9,6 +9,7 @@ use h2::{Reason, RecvStream};
 use http::{Request, Response};
 use share::async_read_recv_stream::AsyncReadRecvStream;
 use share::async_write_send_stream::AsyncWriteSendStream;
+use share::proxy;
 use tap::TapFallible;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::TlsAcceptor;
@@ -17,7 +18,7 @@ use tracing::{error, info};
 
 use crate::auth::Auth;
 use crate::h2_connection::Connection;
-use crate::{addr, proxy, Error};
+use crate::{addr, Error};
 
 pub struct Server {
     token_header: Arc<str>,

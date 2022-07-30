@@ -24,7 +24,6 @@ mod auth;
 mod config;
 mod err;
 mod h2_connection;
-mod proxy;
 mod server;
 
 pub async fn run() -> Result<(), Error> {

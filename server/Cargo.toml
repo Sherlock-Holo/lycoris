@@ -30,7 +30,7 @@ rustls-pemfile = "1"
 
 # config and args
 serde = { version = "1", features = ["derive"] }
-serde_yaml = "0.8"
+serde_yaml = "0.9"
 clap = { version = "3", features = ["derive", "color", "suggestions"] }
 
-share = { path = "../share", features = ["userspace"] }
+share = { path = "../share" }
