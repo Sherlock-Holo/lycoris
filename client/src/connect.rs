@@ -6,10 +6,10 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use bytes::Bytes;
-use futures_channel::mpsc;
 use futures_channel::mpsc::{UnboundedReceiver, UnboundedSender};
-use futures_channel::oneshot::{Receiver, Sender};
-use futures_util::{AsyncRead, StreamExt};
+use futures_channel::oneshot::Sender;
+use futures_channel::{mpsc, oneshot};
+use futures_util::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
 use h2::client::{ResponseFuture, SendRequest};
 use h2::{client, Reason, RecvStream, SendStream};
 use http::header::HeaderName;
@@ -17,7 +17,7 @@ use http::Request;
 use share::async_read_recv_stream::AsyncReadRecvStream;
 use share::async_write_send_stream::AsyncWriteSendStream;
 use tap::TapFallible;
-use tokio::io::{AsyncRead as TokioAsyncRead, AsyncWrite as TikioAsyncWrite, AsyncWrite};
+use tokio::io::{AsyncRead as TokioAsyncRead, AsyncWrite as TokioAsyncWrite};
 use tokio::net::TcpStream;
 use tokio_rustls::rustls::{ClientConfig, ServerName};
 use tokio_rustls::{TlsConnector, TlsStream};
@@ -32,25 +32,25 @@ pub trait Connect {
     type Read: AsyncRead + Unpin + Send + 'static;
     type Write: AsyncWrite + Unpin + Send + 'static;
 
-    async fn connect(addr: SocketAddr) -> Result<(Self::Read, Self::Write), Error>;
+    async fn connect(&self, addr: SocketAddr) -> Result<(Self::Read, Self::Write), Error>;
 }
 
+type ReadWriteStreamTuple = (
+    AsyncReadRecvStream<RecvStream>,
+    AsyncWriteSendStream<SendStream<Bytes>>,
+);
+
 struct ConnectRequest {
-    io_stream_sender: Option<
-        Sender<
-            Result<
-                (
-                    AsyncReadRecvStream<RecvStream>,
-                    AsyncWriteSendStream<SendStream<Bytes>>,
-                ),
-                h2::Error,
-            >,
-        >,
-    >,
+    read_write_sender: Option<Sender<Result<ReadWriteStreamTuple, h2::Error>>>,
     addr: SocketAddr,
 }
 
+#[derive(Clone)]
 pub struct Connector {
+    inner: Arc<ConnectorInner>,
+}
+
+struct ConnectorInner {
     tls_connector: TlsConnector,
     remote_server_name: ServerName,
     remote_addr: SocketAddr,
@@ -66,7 +66,7 @@ impl Connector {
         remote_port: u16,
         token_generator: TokenGenerator,
         token_header: &str,
-    ) -> Result<Arc<Self>, Error> {
+    ) -> Result<Self, Error> {
         let remote_addr = SocketAddr::from_str(&format!("{}:{}", remote_domain, remote_port))
             .map_err(|err| io::Error::new(ErrorKind::InvalidInput, err))?;
 
@@ -77,7 +77,7 @@ impl Connector {
 
         let (sender, receiver) = mpsc::unbounded();
 
-        let this = Arc::new(Self {
+        let inner = Arc::new(ConnectorInner {
             tls_connector,
             remote_server_name,
             remote_addr,
@@ -85,6 +85,8 @@ impl Connector {
             token_header: token_header.to_string(),
             connect_request_sender: sender,
         });
+
+        let this = Self { inner };
 
         {
             let this = this.clone();
@@ -97,8 +99,9 @@ impl Connector {
 
     async fn tls_handshake(&self, tcp_stream: TcpStream) -> Result<TlsStream<TcpStream>, Error> {
         let tls_stream = self
+            .inner
             .tls_connector
-            .connect(self.remote_server_name.clone(), tcp_stream)
+            .connect(self.inner.remote_server_name.clone(), tcp_stream)
             .await
             .tap_err(|err| error!(%err, "tls connect failed"))?;
 
@@ -106,11 +109,11 @@ impl Connector {
     }
 
     async fn get_new_h2_send_request(&self) -> Result<SendRequest<Bytes>, Error> {
-        let tcp_stream = TcpStream::connect(self.remote_addr).await.tap_err(
-            |err| error!(%err, remote_addr = %self.remote_addr, "connect to remote addr failed"),
+        let tcp_stream = TcpStream::connect(self.inner.remote_addr).await.tap_err(
+            |err| error!(%err, remote_addr = %self.inner.remote_addr, "connect to remote addr failed"),
         )?;
 
-        info!(remote_addr = %self.remote_addr, "connect remote done");
+        info!(remote_addr = %self.inner.remote_addr, "connect remote done");
 
         let tls_stream = self.tls_handshake(tcp_stream).await?;
 
@@ -135,12 +138,15 @@ impl Connector {
             'CONNECT_LOOP: while let Some(mut connect_request) =
                 connect_request_receiver.next().await
             {
-                let token = self.token_generator.generate_token();
+                let token = self.inner.token_generator.generate_token();
                 let mut request = Request::new(());
                 request.headers_mut().insert(
-                    self.token_header.parse::<HeaderName>().unwrap_or_else(|_| {
-                        panic!("token header {} is invalid", self.token_header)
-                    }),
+                    self.inner
+                        .token_header
+                        .parse::<HeaderName>()
+                        .unwrap_or_else(|_| {
+                            panic!("token header {} is invalid", self.inner.token_header)
+                        }),
                     token
                         .parse()
                         .unwrap_or_else(|_| panic!("token {} is invalid header value", token)),
@@ -151,7 +157,7 @@ impl Connector {
                         error!(%err, "send h2 request failed");
 
                         let _ = connect_request
-                            .io_stream_sender
+                            .read_write_sender
                             .take()
                             .unwrap()
                             .send(Err(err));
@@ -160,13 +166,15 @@ impl Connector {
                     }
 
                     Ok((response, send_stream)) => {
+                        info!("get send_stream and response done");
+
                         tokio::spawn(async move {
                             let result =
                                 connect_remote_addr(send_stream, response, connect_request.addr)
                                     .await;
 
                             let _ = connect_request
-                                .io_stream_sender
+                                .read_write_sender
                                 .take()
                                 .unwrap()
                                 .send(result);
@@ -178,17 +186,44 @@ impl Connector {
     }
 }
 
+#[async_trait::async_trait]
+impl Connect for Connector {
+    type Read = AsyncReadRecvStream<RecvStream>;
+    type Write = AsyncWriteSendStream<SendStream<Bytes>>;
+
+    async fn connect(&self, addr: SocketAddr) -> Result<(Self::Read, Self::Write), Error> {
+        let (sender, receiver) = oneshot::channel();
+        let connect_request = ConnectRequest {
+            read_write_sender: Some(sender),
+            addr,
+        };
+
+        self.inner
+            .connect_request_sender
+            .clone()
+            .send(connect_request)
+            .await
+            .tap_err(|err| error!(%err, "send connect request failed"))
+            .map_err(|err| io::Error::new(ErrorKind::BrokenPipe, err))?;
+
+        info!("send connect request done");
+
+        let read_write = receiver
+            .await
+            .tap_err(|err| error!(%err, "receive read write failed"))
+            .map_err(|err| io::Error::new(ErrorKind::BrokenPipe, err))??;
+
+        info!("get read write done");
+
+        Ok(read_write)
+    }
+}
+
 async fn connect_remote_addr(
     mut send_stream: SendStream<Bytes>,
     response: ResponseFuture,
     remote_addr: SocketAddr,
-) -> Result<
-    (
-        AsyncReadRecvStream<RecvStream>,
-        AsyncWriteSendStream<SendStream<Bytes>>,
-    ),
-    h2::Error,
-> {
+) -> Result<ReadWriteStreamTuple, h2::Error> {
     let remote_addr_data = addr::encode_addr(remote_addr);
 
     send_stream.reserve_capacity(remote_addr_data.len());
@@ -230,7 +265,7 @@ async fn connect_remote_addr(
     ))
 }
 
-async fn h2_handshake<IO: TokioAsyncRead + TikioAsyncWrite + Unpin + Send + 'static>(
+async fn h2_handshake<IO: TokioAsyncRead + TokioAsyncWrite + Unpin + Send + 'static>(
     stream: IO,
 ) -> Result<SendRequest<Bytes>, Error> {
     let (mut send_request, h2_conn) = client::handshake(stream)

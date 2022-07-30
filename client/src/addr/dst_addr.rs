@@ -3,18 +3,13 @@ use std::time::Duration;
 
 use aya::maps::{HashMap, MapError, MapRefMut};
 use aya::Pod;
-use share::{ConnectedIpv4Addr, Ipv4Addr as ShareIpv4Addr};
 use tap::TapFallible;
 use tokio::sync::RwLock;
 use tokio::time;
 use tracing::error;
 
+use crate::bpf_share::{ConnectedIpv4Addr, Ipv4Addr as ShareIpv4Addr};
 use crate::err::Error;
-
-#[derive(Debug, Copy, Clone)]
-pub enum ConnectedAddr {
-    V4(ConnectedIpv4Addr),
-}
 
 pub trait LimitedBpfHashMap<K: Pod, V: Pod> {
     fn get(&self, key: &K) -> Result<V, MapError>;

@@ -19,6 +19,15 @@ pub enum Error {
 
     #[error("build auth failed: {0:?}")]
     Auth(totp_rs::TotpUrlError),
+
+    #[error("bpf error: {0}")]
+    Bpf(#[from] aya::BpfError),
+
+    #[error("bpf program error: {0}")]
+    BpfProgram(#[from] aya::programs::ProgramError),
+
+    #[error(transparent)]
+    Other(Box<dyn std::error::Error + Send + Sync + 'static>),
 }
 
 impl From<totp_rs::TotpUrlError> for Error {

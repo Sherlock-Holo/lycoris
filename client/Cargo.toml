@@ -31,12 +31,14 @@ http = "0.2"
 # tls
 tokio-rustls = "0.23"
 rustls-pemfile = "1"
+webpki-roots = "0.22"
 
 # config and args
 serde = { version = "1", features = ["derive"] }
-serde_yaml = "0.8"
+serde_yaml = "0.9"
 clap = { version = "3", features = ["derive", "color", "suggestions"] }
 
 # bpf
 aya = { version = "0.11", features = ["async_tokio"] }
-share = { path = "../share", features = ["userspace"] }
+
+share = { path = "../share" }

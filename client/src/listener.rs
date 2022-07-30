@@ -1,12 +1,12 @@
 use std::net::{SocketAddr, SocketAddrV4};
 
 use aya::maps::{HashMap, MapRefMut};
-use share::{ConnectedIpv4Addr, Ipv4Addr as ShareIpv4Addr};
 use tap::TapFallible;
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{error, info, warn};
 
 use crate::addr::DstAddrLookup;
+use crate::bpf_share::{ConnectedIpv4Addr, Ipv4Addr as ShareIpv4Addr};
 use crate::err::Error;
 
 pub struct Listener {
