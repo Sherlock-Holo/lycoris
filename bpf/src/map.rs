@@ -6,13 +6,11 @@ use crate::{ConnectedIpv4Addr, Ipv4Addr};
 
 #[map]
 /// key is socket cookie, value is origin dst ipv4 addr
-pub static DST_IPV4_ADDR_STORE: LruHashMap<u64, Ipv4Addr> =
-    LruHashMap::pinned(128, BPF_F_NO_PREALLOC);
+pub static DST_IPV4_ADDR_STORE: LruHashMap<u64, Ipv4Addr> = LruHashMap::pinned(4096, 0);
 
 #[map]
 /// key is connected ipv4 addr, value is origin dst ipv4 addr
-pub static IPV4_ADDR_MAP: LruHashMap<ConnectedIpv4Addr, Ipv4Addr> =
-    LruHashMap::pinned(128, BPF_F_NO_PREALLOC);
+pub static IPV4_ADDR_MAP: LruHashMap<ConnectedIpv4Addr, Ipv4Addr> = LruHashMap::pinned(4096, 0);
 
 #[map]
 /// key is need proxy ipv4 addr, value is u8 and it's a bool type

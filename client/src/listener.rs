@@ -79,7 +79,15 @@ impl Listener {
                     continue;
                 }
 
-                Some(origin_dst_addr) => return Ok((tcp_stream, origin_dst_addr)),
+                Some(origin_dst_addr) => {
+                    info!(
+                        ?connected_ipv4addr,
+                        %origin_dst_addr,
+                        "get origin dst addr by connected ipv4 addr done"
+                    );
+
+                    return Ok((tcp_stream, origin_dst_addr));
+                }
             }
         }
     }

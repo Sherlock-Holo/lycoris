@@ -50,6 +50,21 @@ pub fn handle_sockops(ctx: SockOpsContext) -> Result<(), c_long> {
     let daddr = u32::from_be(ctx.remote_ip4()).to_be_bytes();
     let dport = u32::from_be(ctx.remote_port()) as u16;
 
+    debug!(
+        &ctx,
+        "saddr {}.{}.{}.{}:{} , daddr {}.{}.{}.{}:{}",
+        saddr[0],
+        saddr[1],
+        saddr[2],
+        saddr[3],
+        sport,
+        daddr[0],
+        daddr[1],
+        daddr[2],
+        daddr[3],
+        dport,
+    );
+
     let connected_ipv4_addr = ConnectedIpv4Addr {
         sport,
         dport,

@@ -2,7 +2,6 @@ use std::future::poll_fn;
 use std::io;
 use std::io::ErrorKind;
 use std::net::SocketAddr;
-use std::str::FromStr;
 use std::sync::Arc;
 
 use bytes::Bytes;
@@ -18,6 +17,7 @@ use share::async_read_recv_stream::AsyncReadRecvStream;
 use share::async_write_send_stream::AsyncWriteSendStream;
 use tap::TapFallible;
 use tokio::io::{AsyncRead as TokioAsyncRead, AsyncWrite as TokioAsyncWrite};
+use tokio::net;
 use tokio::net::TcpStream;
 use tokio_rustls::rustls::{ClientConfig, ServerName};
 use tokio_rustls::{TlsConnector, TlsStream};
@@ -53,22 +53,31 @@ pub struct Connector {
 struct ConnectorInner {
     tls_connector: TlsConnector,
     remote_server_name: ServerName,
-    remote_addr: SocketAddr,
+    remote_addrs: Vec<SocketAddr>,
     token_generator: TokenGenerator,
     token_header: String,
     connect_request_sender: UnboundedSender<ConnectRequest>,
 }
 
 impl Connector {
-    pub fn new(
+    pub async fn new(
         client_config: ClientConfig,
         remote_domain: &str,
         remote_port: u16,
         token_generator: TokenGenerator,
         token_header: &str,
     ) -> Result<Self, Error> {
-        let remote_addr = SocketAddr::from_str(&format!("{}:{}", remote_domain, remote_port))
-            .map_err(|err| io::Error::new(ErrorKind::InvalidInput, err))?;
+        let remote_addrs = net::lookup_host(format!("{}:{}", remote_domain, remote_port))
+            .await?
+            .collect::<Vec<_>>();
+
+        if remote_addrs.is_empty() {
+            return Err(
+                io::Error::new(ErrorKind::AddrNotAvailable, "remote addrs is empty").into(),
+            );
+        }
+
+        info!(?remote_addrs, "lookup remote_domain done");
 
         let remote_server_name = ServerName::try_from(remote_domain)
             .map_err(|err| io::Error::new(ErrorKind::InvalidInput, err))?;
@@ -80,7 +89,7 @@ impl Connector {
         let inner = Arc::new(ConnectorInner {
             tls_connector,
             remote_server_name,
-            remote_addr,
+            remote_addrs,
             token_generator,
             token_header: token_header.to_string(),
             connect_request_sender: sender,
@@ -103,17 +112,30 @@ impl Connector {
             .tls_connector
             .connect(self.inner.remote_server_name.clone(), tcp_stream)
             .await
-            .tap_err(|err| error!(%err, "tls connect failed"))?;
+            .tap_err(|err| {
+                error!(
+                    remote_server_name = ?self.inner.remote_server_name,
+                    %err,
+                    "tls connect failed"
+                )
+            })?;
 
         Ok(tls_stream.into())
     }
 
     async fn get_new_h2_send_request(&self) -> Result<SendRequest<Bytes>, Error> {
-        let tcp_stream = TcpStream::connect(self.inner.remote_addr).await.tap_err(
-            |err| error!(%err, remote_addr = %self.inner.remote_addr, "connect to remote addr failed"),
+        let tcp_stream = TcpStream::connect(self.inner.remote_addrs.as_slice()).await.tap_err(
+            |err| error!(%err, remote_addrs = ?self.inner.remote_addrs, "connect to remote addr failed"),
         )?;
 
-        info!(remote_addr = %self.inner.remote_addr, "connect remote done");
+        let local_addr = tcp_stream
+            .local_addr()
+            .tap_err(|err| error!(%err, "get tcp local addr failed"))?;
+        let peer_addr = tcp_stream
+            .peer_addr()
+            .tap_err(|err| error!(%err, "get tcp peer addr failed"))?;
+
+        info!(%local_addr, %peer_addr, "connect remote done");
 
         let tls_stream = self.tls_handshake(tcp_stream).await?;
 

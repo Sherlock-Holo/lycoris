@@ -26,16 +26,16 @@ use webpki_roots::TLS_SERVER_ROOTS;
 
 use crate::args::Args;
 use crate::bpf_share::Ipv4Addr;
-use crate::client::Client;
+pub use crate::client::Client;
 use crate::config::Config;
-use crate::connect::Connector;
+pub use crate::connect::Connector;
 pub use crate::err::Error;
-use crate::listener::Listener;
-use crate::token::TokenGenerator;
+pub use crate::listener::Listener;
+pub use crate::token::TokenGenerator;
 
 mod addr;
 mod args;
-mod bpf_share;
+pub mod bpf_share;
 mod client;
 mod config;
 mod connect;
@@ -227,6 +227,7 @@ async fn load_connector(
         token_generator,
         token_header,
     )
+    .await
 }
 
 async fn load_target_ip(bpf: &mut Bpf, ip_list: &Path) -> Result<(), Error> {
