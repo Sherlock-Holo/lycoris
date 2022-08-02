@@ -57,7 +57,7 @@ pub async fn run() -> Result<(), Error> {
 
     let mut bpf = BpfLoader::new()
         .btf(Btf::from_sys_fs().ok().as_ref())
-        .map_pin_path(config.bpf_path)
+        .map_pin_path(config.bpf_pin_path)
         .load_file(args.bpf_elf)?;
 
     init_bpf_log(&mut bpf);

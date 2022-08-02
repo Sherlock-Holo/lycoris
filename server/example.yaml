@@ -1,0 +1,5 @@
+key: example/server.key
+cert: example//server.cert
+listen_addr: 0.0.0.0:443
+totp_secret: test
+token_header: x-token

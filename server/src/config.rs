@@ -7,7 +7,6 @@ use serde::Deserialize;
 pub struct Config {
     pub key: PathBuf,
     pub cert: PathBuf,
-    pub domain: Option<String>,
     pub listen_addr: SocketAddr,
     pub totp_secret: String,
     pub token_header: String,
