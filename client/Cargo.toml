@@ -23,7 +23,7 @@ tracing-subscriber = "0.3"
 
 # bpf log
 aya-log = { git = "https://github.com/aya-rs/aya-log", branch = "main" }
-simplelog = "0.12"
+tracing-log = "0.1"
 
 # auth
 totp-rs = "2"

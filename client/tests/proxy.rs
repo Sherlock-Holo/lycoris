@@ -20,7 +20,6 @@ use futures_util::StreamExt;
 use h2::server;
 use http::Response;
 use nix::unistd::getuid;
-use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use tokio::fs;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
@@ -32,6 +31,7 @@ use tokio_rustls::webpki::TrustAnchor;
 use tokio_rustls::TlsAcceptor;
 use tracing::level_filters::LevelFilter;
 use tracing::{info, subscriber};
+use tracing_log::LogTracer;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{fmt, Registry};
@@ -314,20 +314,7 @@ fn init_log() {
 }
 
 fn init_bpf_log(bpf: &mut Bpf) {
-    use simplelog::LevelFilter;
+    LogTracer::builder().ignore_crate("rustls").init().unwrap();
 
-    TermLogger::init(
-        LevelFilter::Debug,
-        ConfigBuilder::new()
-            .add_filter_ignore("rustls".to_string())
-            .set_target_level(LevelFilter::Info)
-            .set_location_level(LevelFilter::Info)
-            .build(),
-        TerminalMode::Mixed,
-        ColorChoice::Auto,
-    )
-    .unwrap();
-
-    // Will log using the default logger, which is TermLogger in this case
     BpfLogger::init(bpf).unwrap();
 }

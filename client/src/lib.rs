@@ -9,6 +9,7 @@ use aya::maps::Array;
 use aya::programs::cgroup_sock_addr::CgroupSockAddrLink;
 use aya::programs::{CgroupSockAddr, OwnedLink, SockOps};
 use aya::{Bpf, BpfLoader, Btf};
+use aya_log::BpfLogger;
 use cidr::Ipv4Inet;
 use clap::Parser;
 use futures_util::io::BufReader;
@@ -20,6 +21,7 @@ use tokio_rustls::webpki::TrustAnchor;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 use tracing::level_filters::LevelFilter;
 use tracing::{info, subscriber};
+use tracing_log::LogTracer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{fmt, Registry};
 use webpki_roots::TLS_SERVER_ROOTS;
@@ -57,6 +59,8 @@ pub async fn run() -> Result<(), Error> {
         .btf(Btf::from_sys_fs().ok().as_ref())
         .map_pin_path(config.bpf_path)
         .load_file(args.bpf_elf)?;
+
+    init_bpf_log(&mut bpf);
 
     set_proxy_addr(&mut bpf, config.listen_addr)?;
 
@@ -264,4 +268,10 @@ fn init_log() {
     let layered = Registry::default().with(layer).with(LevelFilter::INFO);
 
     subscriber::set_global_default(layered).unwrap();
+}
+
+fn init_bpf_log(bpf: &mut Bpf) {
+    LogTracer::builder().ignore_crate("rustls").init().unwrap();
+
+    BpfLogger::init(bpf).unwrap();
 }
