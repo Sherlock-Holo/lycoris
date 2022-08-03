@@ -86,7 +86,7 @@ pub async fn run() -> Result<(), Error> {
         &config.remote_domain,
         config.remote_port.unwrap_or(443),
         config.ca_cert.as_deref(),
-        &config.totp_secret,
+        &config.token_secret,
         &config.token_header,
     )
     .await?;

@@ -47,7 +47,7 @@ pub async fn run() -> Result<(), Error> {
 
     info!(listen_addr = %config.listen_addr, "start listen");
 
-    let auth = Auth::new(config.totp_secret, None)?;
+    let auth = Auth::new(config.token_secret, None)?;
 
     let mut server = Server::new(&config.token_header, auth, tcp_listener, tls_acceptor);
 

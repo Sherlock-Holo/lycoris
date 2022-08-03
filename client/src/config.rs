@@ -9,7 +9,7 @@ pub struct Config {
     pub remote_domain: String,
     pub remote_port: Option<u16>,
     pub ca_cert: Option<PathBuf>,
-    pub totp_secret: String,
+    pub token_secret: String,
     pub token_header: String,
     pub cgroup_path: PathBuf,
     pub bpf_pin_path: PathBuf,

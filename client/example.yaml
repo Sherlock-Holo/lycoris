@@ -2,7 +2,7 @@ listen_addr: 127.0.0.1:1980
 remote_domain: example.com
 remote_port: 443
 ca_cert: example/ca.cert
-totp_secret: test
-totp_header: x-token
+token_secret: test
+token_header: x-token
 cgroup_path: /sys/fs/cgroup
 bpf_pin_path: /sys/fs/bpf/lycoris
