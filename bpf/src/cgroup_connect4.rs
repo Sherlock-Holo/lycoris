@@ -43,11 +43,6 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
         return Ok(());
     }
 
-    debug!(
-        &ctx,
-        "{}.{}.{}.{} need proxy", user_ip4[0], user_ip4[1], user_ip4[2], user_ip4[3]
-    );
-
     let proxy_server: &Ipv4Addr = match PROXY_IPv4_SERVER.get(0) {
         None => {
             debug!(
@@ -64,6 +59,17 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
 
         Some(proxy_server) => proxy_server,
     };
+
+    if user_ip4 == proxy_server.addr {
+        debug!(&ctx, "proxy server ip need connect directly");
+
+        return Ok(());
+    }
+
+    debug!(
+        &ctx,
+        "{}.{}.{}.{} need proxy", user_ip4[0], user_ip4[1], user_ip4[2], user_ip4[3]
+    );
 
     debug!(
         &ctx,
