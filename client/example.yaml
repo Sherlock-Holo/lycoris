@@ -5,4 +5,3 @@ ca_cert: example/ca.cert
 token_secret: test
 token_header: x-token
 cgroup_path: /sys/fs/cgroup
-bpf_pin_path: /sys/fs/bpf/lycoris

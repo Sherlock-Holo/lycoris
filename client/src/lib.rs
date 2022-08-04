@@ -1,6 +1,5 @@
 use std::any::Any;
 use std::io;
-use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::str::FromStr;
@@ -9,7 +8,7 @@ use aya::maps::lpm_trie::{Key, LpmTrie};
 use aya::maps::Array;
 use aya::programs::cgroup_sock_addr::CgroupSockAddrLink;
 use aya::programs::{CgroupSockAddr, OwnedLink, SockOps};
-use aya::{Bpf, BpfLoader, Btf};
+use aya::Bpf;
 use aya_log::BpfLogger;
 use cidr::Ipv4Inet;
 use clap::Parser;
@@ -21,7 +20,7 @@ use tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
 use tokio_rustls::webpki::TrustAnchor;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 use tracing::level_filters::LevelFilter;
-use tracing::{error, info, subscriber};
+use tracing::{info, subscriber};
 use tracing_log::LogTracer;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
@@ -57,18 +56,7 @@ pub async fn run() -> Result<(), Error> {
 
     info!(?config, "load config done");
 
-    if let Err(err) = fs::create_dir_all(&config.bpf_pin_path).await {
-        if err.kind() != ErrorKind::AlreadyExists {
-            error!(%err, bpf_pin_path = ?config.bpf_pin_path, "create bpf pin path failed");
-
-            return Err(err.into());
-        }
-    }
-
-    let mut bpf = BpfLoader::new()
-        .btf(Btf::from_sys_fs().ok().as_ref())
-        .map_pin_path(config.bpf_pin_path)
-        .load_file(args.bpf_elf)?;
+    let mut bpf = Bpf::load_file(args.bpf_elf)?;
 
     init_bpf_log(&mut bpf);
 

@@ -12,5 +12,4 @@ pub struct Config {
     pub token_secret: String,
     pub token_header: String,
     pub cgroup_path: PathBuf,
-    pub bpf_pin_path: PathBuf,
 }

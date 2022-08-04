@@ -1,6 +1,5 @@
 use std::any::Any;
 use std::io;
-use std::io::ErrorKind;
 use std::net::{SocketAddr, SocketAddrV4};
 use std::path::Path;
 use std::str::FromStr;
@@ -10,7 +9,7 @@ use aya::maps::lpm_trie::{Key, LpmTrie};
 use aya::maps::Array;
 use aya::programs::cgroup_sock_addr::CgroupSockAddrLink;
 use aya::programs::{CgroupSockAddr, OwnedLink, SockOps};
-use aya::{Bpf, BpfLoader};
+use aya::Bpf;
 use aya_log::BpfLogger;
 use bytes::Bytes;
 use cidr::Ipv4Inet;
@@ -37,8 +36,6 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{fmt, Registry};
 
 const CGROUP_PATH: &str = "/sys/fs/cgroup";
-const BPF_PATH_ROOT: &str = "/sys/fs/bpf";
-const BPF_PATH: &str = "/sys/fs/bpf/lycoris_test";
 const BPF_ELF: &str = "../target/bpfel-unknown-none/release/bpf";
 const TEST_LISTEN_ADDR: &str = "127.0.0.1:23333";
 const TOKEN_SECRET: &str = "test";
@@ -53,24 +50,11 @@ async fn main() {
         panic!("this integration test must run with root");
     }
 
-    if !fs::metadata(BPF_PATH_ROOT).await.unwrap().is_dir() {
-        panic!("bpf path root {} is not dir", BPF_PATH_ROOT);
-    }
-
-    if let Err(err) = fs::create_dir(BPF_PATH).await {
-        if err.kind() != ErrorKind::AlreadyExists {
-            panic!("{}", err);
-        }
-    }
-
     init_log();
 
     let listen_addr = SocketAddrV4::from_str(TEST_LISTEN_ADDR).unwrap();
 
-    let mut bpf = BpfLoader::new()
-        .map_pin_path(BPF_PATH)
-        .load_file(BPF_ELF)
-        .unwrap();
+    let mut bpf = Bpf::load_file(BPF_ELF).unwrap();
 
     init_bpf_log(&mut bpf);
 
