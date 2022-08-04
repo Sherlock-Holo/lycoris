@@ -1,5 +1,6 @@
 use std::any::Any;
 use std::io;
+use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::str::FromStr;
@@ -20,8 +21,9 @@ use tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
 use tokio_rustls::webpki::TrustAnchor;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 use tracing::level_filters::LevelFilter;
-use tracing::{info, subscriber};
+use tracing::{error, info, subscriber};
 use tracing_log::LogTracer;
+use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{fmt, Registry};
 use webpki_roots::TLS_SERVER_ROOTS;
@@ -48,12 +50,20 @@ mod token;
 pub async fn run() -> Result<(), Error> {
     let args = Args::parse();
 
-    init_log();
+    init_log(args.debug);
 
     let config = fs::read(args.config).await?;
     let config = serde_yaml::from_slice::<Config>(&config)?;
 
     info!(?config, "load config done");
+
+    if let Err(err) = fs::create_dir_all(&config.bpf_pin_path).await {
+        if err.kind() != ErrorKind::AlreadyExists {
+            error!(%err, bpf_pin_path = ?config.bpf_pin_path, "create bpf pin path failed");
+
+            return Err(err.into());
+        }
+    }
 
     let mut bpf = BpfLoader::new()
         .btf(Btf::from_sys_fs().ok().as_ref())
@@ -134,11 +144,11 @@ async fn load_established_sockops(
 
     prog.load()?;
 
-    println!("loaded established_connect done");
+    info!("loaded established_connect done");
 
     let link_id = prog.attach(cgroup_file).unwrap();
 
-    println!("attach established_connect done");
+    info!("attach established_connect done");
 
     Ok(Box::new(prog.take_link(link_id)?))
 }
@@ -260,12 +270,23 @@ async fn load_target_ip(bpf: &mut Bpf, ip_list: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-fn init_log() {
+fn init_log(debug: bool) {
     let layer = fmt::layer()
         .pretty()
         .with_target(true)
         .with_writer(io::stderr);
-    let layered = Registry::default().with(layer).with(LevelFilter::INFO);
+
+    let level = if debug {
+        LevelFilter::DEBUG
+    } else {
+        LevelFilter::INFO
+    };
+
+    let targets = Targets::new()
+        .with_target("h2", LevelFilter::OFF)
+        .with_default(LevelFilter::DEBUG);
+
+    let layered = Registry::default().with(targets).with(layer).with(level);
 
     subscriber::set_global_default(layered).unwrap();
 }
