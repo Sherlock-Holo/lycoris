@@ -14,8 +14,8 @@ use cidr::Ipv4Inet;
 use clap::Parser;
 use futures_util::io::BufReader;
 use futures_util::{AsyncBufReadExt, StreamExt};
-use tokio::fs;
 use tokio::fs::File;
+use tokio::{fs, net};
 use tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
 use tokio_rustls::webpki::TrustAnchor;
 use tokio_util::compat::TokioAsyncReadCompatExt;
@@ -56,6 +56,12 @@ pub async fn run() -> Result<(), Error> {
 
     info!(?config, "load config done");
 
+    let remote_domain_ips = net::lookup_host(&config.remote_domain)
+        .await?
+        .collect::<Vec<_>>();
+
+    info!(?remote_domain_ips, "get remote domain ip done");
+
     let mut bpf = Bpf::load_file(args.bpf_elf)?;
 
     init_bpf_log(&mut bpf);
@@ -69,6 +75,10 @@ pub async fn run() -> Result<(), Error> {
     info!("set target ip done");
 
     set_proxy_ip_list_mode(&bpf, config.blacklist_mode)?;
+
+    if !config.blacklist_mode {
+        append_remote_ip_list(&bpf, &remote_domain_ips)?;
+    }
 
     info!(
         blacklist_mode = config.blacklist_mode,
@@ -158,8 +168,8 @@ fn set_proxy_addr(bpf: &Bpf, addr: SocketAddr) -> Result<(), Error> {
     };
 
     let mut proxy_server: Array<_, Ipv4Addr> = bpf
-        .map_mut("PROXY_SERVER")
-        .expect("PROXY_SERVER bpf array not found")
+        .map_mut("PROXY_IPV4_SERVER")
+        .expect("PROXY_IPV4_SERVER bpf array not found")
         .try_into()?;
 
     let proxy_addr = Ipv4Addr {
@@ -260,6 +270,25 @@ async fn set_proxy_ip_list(bpf: &Bpf, ip_list: &Path) -> Result<(), Error> {
             1,
             0,
         )?;
+    }
+
+    Ok(())
+}
+
+fn append_remote_ip_list(bpf: &Bpf, remote_domain_ip: &[SocketAddr]) -> Result<(), Error> {
+    let proxy_ipv4_list: LpmTrie<_, [u8; 4], u8> = bpf
+        .map_mut("PROXY_IPV4_LIST")
+        .expect("PROXY_IPV4_LIST not found")
+        .try_into()?;
+
+    for ipv4_addr in remote_domain_ip.iter().filter_map(|addr| {
+        if let SocketAddr::V4(addr) = addr {
+            Some(addr)
+        } else {
+            None
+        }
+    }) {
+        proxy_ipv4_list.insert(&Key::new(32, ipv4_addr.ip().octets()), 1, 0)?;
     }
 
     Ok(())
