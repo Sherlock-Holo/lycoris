@@ -3,9 +3,10 @@ use std::io;
 use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use bytes::Bytes;
-use futures_channel::mpsc::{UnboundedReceiver, UnboundedSender};
+use futures_channel::mpsc::{Receiver as BoundedReceiver, Sender as BoundedSender};
 use futures_channel::oneshot::Sender;
 use futures_channel::{mpsc, oneshot};
 use futures_util::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
@@ -17,8 +18,8 @@ use share::async_read_recv_stream::AsyncReadRecvStream;
 use share::async_write_send_stream::AsyncWriteSendStream;
 use tap::TapFallible;
 use tokio::io::{AsyncRead as TokioAsyncRead, AsyncWrite as TokioAsyncWrite};
-use tokio::net;
 use tokio::net::TcpStream;
+use tokio::{net, time};
 use tokio_rustls::rustls::{ClientConfig, ServerName};
 use tokio_rustls::{TlsConnector, TlsStream};
 use tracing::{error, info};
@@ -56,7 +57,7 @@ struct ConnectorInner {
     remote_addrs: Vec<SocketAddr>,
     token_generator: TokenGenerator,
     token_header: String,
-    connect_request_sender: UnboundedSender<ConnectRequest>,
+    connect_request_sender: BoundedSender<ConnectRequest>,
 }
 
 impl Connector {
@@ -84,7 +85,7 @@ impl Connector {
 
         let tls_connector = TlsConnector::from(Arc::new(client_config));
 
-        let (sender, receiver) = mpsc::unbounded();
+        let (sender, receiver) = mpsc::channel(1);
 
         let inner = Arc::new(ConnectorInner {
             tls_connector,
@@ -146,12 +147,15 @@ impl Connector {
 
     async fn start_h2_connect_loop(
         &self,
-        mut connect_request_receiver: UnboundedReceiver<ConnectRequest>,
+        mut connect_request_receiver: BoundedReceiver<ConnectRequest>,
     ) {
         loop {
             let mut send_request = if let Ok(send_request) = self.get_new_h2_send_request().await {
                 send_request
             } else {
+                // control the connect speed when get h2 send request failed
+                time::sleep(Duration::from_millis(50)).await;
+
                 continue;
             };
 
