@@ -23,8 +23,18 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
     let user_ip4 = u32::from_be(sock_addr.user_ip4).to_be_bytes();
     let key = Key::new(32, user_ip4);
 
-    let should_proxy = PROXY_IPV4_LIST.get(&key).copied().unwrap_or(0) > 0;
-    if !should_proxy {
+    let is_blacklist_mode = match PROXY_IPV4_LIST_MODE.get(0) {
+        None => {
+            debug!(&ctx, "get proxy ipv4 list mode failed");
+
+            return Err(0);
+        }
+
+        Some(mode) => *mode == BLACKLIST_MODE,
+    };
+
+    let in_list = PROXY_IPV4_LIST.get(&key).copied().unwrap_or(0) > 0;
+    if !in_list && is_blacklist_mode {
         debug!(
             &ctx,
             "{}.{}.{}.{} is direct connect ip", user_ip4[0], user_ip4[1], user_ip4[2], user_ip4[3]
@@ -38,7 +48,7 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
         "{}.{}.{}.{} need proxy", user_ip4[0], user_ip4[1], user_ip4[2], user_ip4[3]
     );
 
-    let proxy_server: &Ipv4Addr = match PROXY_SERVER.get(0) {
+    let proxy_server: &Ipv4Addr = match PROXY_IPv4_SERVER.get(0) {
         None => {
             debug!(
                 &ctx,
