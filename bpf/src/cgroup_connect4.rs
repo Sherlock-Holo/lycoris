@@ -43,7 +43,7 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
         return Ok(());
     }
 
-    let proxy_server: &Ipv4Addr = match PROXY_IPv4_SERVER.get(0) {
+    let proxy_server: &Ipv4Addr = match PROXY_IPV4_SERVER.get(0) {
         None => {
             debug!(
                 &ctx,
