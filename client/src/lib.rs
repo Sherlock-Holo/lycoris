@@ -60,13 +60,20 @@ pub async fn run() -> Result<(), Error> {
 
     init_bpf_log(&mut bpf);
 
-    set_proxy_addr(&mut bpf, config.listen_addr)?;
+    set_proxy_addr(&bpf, config.listen_addr)?;
 
     info!(listen_addr = %config.listen_addr, "set proxy addr done");
 
-    load_target_ip(&mut bpf, &args.ip_list).await?;
+    set_proxy_ip_list(&bpf, &args.ip_list).await?;
 
-    info!("load target ip done");
+    info!("set target ip done");
+
+    set_proxy_ip_list_mode(&bpf, config.blacklist_mode)?;
+
+    info!(
+        blacklist_mode = config.blacklist_mode,
+        "set proxy ip list mode done"
+    );
 
     let _connect4_link = load_connect4(&mut bpf, &config.cgroup_path).await?;
 
@@ -141,7 +148,7 @@ async fn load_established_sockops(
     Ok(Box::new(prog.take_link(link_id)?))
 }
 
-fn set_proxy_addr(bpf: &mut Bpf, addr: SocketAddr) -> Result<(), Error> {
+fn set_proxy_addr(bpf: &Bpf, addr: SocketAddr) -> Result<(), Error> {
     let addr = match addr {
         SocketAddr::V6(_) => {
             return Err(Error::Other("ipv6 is unsupported yet".into()));
@@ -232,7 +239,7 @@ async fn load_connector(
     .await
 }
 
-async fn load_target_ip(bpf: &mut Bpf, ip_list: &Path) -> Result<(), Error> {
+async fn set_proxy_ip_list(bpf: &Bpf, ip_list: &Path) -> Result<(), Error> {
     let proxy_ipv4_list: LpmTrie<_, [u8; 4], u8> = bpf
         .map_mut("PROXY_IPV4_LIST")
         .expect("PROXY_IPV4_LIST not found")
@@ -254,6 +261,19 @@ async fn load_target_ip(bpf: &mut Bpf, ip_list: &Path) -> Result<(), Error> {
             0,
         )?;
     }
+
+    Ok(())
+}
+
+fn set_proxy_ip_list_mode(bpf: &Bpf, blacklist_mode: bool) -> Result<(), Error> {
+    let mut proxy_ipv4_list_mode: Array<_, u8> = bpf
+        .map_mut("PROXY_IPV4_LIST_MODE")
+        .expect("PROXY_IPV4_LIST_MODE not found")
+        .try_into()?;
+
+    let mode = if blacklist_mode { 0 } else { 1 };
+
+    proxy_ipv4_list_mode.set(0, mode, 0)?;
 
     Ok(())
 }

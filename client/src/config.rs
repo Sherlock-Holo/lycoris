@@ -12,4 +12,11 @@ pub struct Config {
     pub token_secret: String,
     pub token_header: String,
     pub cgroup_path: PathBuf,
+    #[serde(default = "default_blacklist_mode")]
+    pub blacklist_mode: bool,
+}
+
+#[inline]
+const fn default_blacklist_mode() -> bool {
+    true
 }
