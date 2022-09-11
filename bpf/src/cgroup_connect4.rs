@@ -34,7 +34,7 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
     };
 
     let in_list = PROXY_IPV4_LIST.get(&key).copied().unwrap_or(0) > 0;
-    if !in_list && is_blacklist_mode {
+    if !should_proxy(is_blacklist_mode, in_list) {
         debug!(
             &ctx,
             "{}.{}.{}.{} is direct connect ip", user_ip4[0], user_ip4[1], user_ip4[2], user_ip4[3]
@@ -43,7 +43,7 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
         return Ok(());
     }
 
-    let proxy_server: &Ipv4Addr = match PROXY_IPV4_SERVER.get(0) {
+    let proxy_client: &Ipv4Addr = match PROXY_IPV4_CLIENT.get(0) {
         None => {
             debug!(
                 &ctx,
@@ -60,8 +60,15 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
         Some(proxy_server) => proxy_server,
     };
 
-    if user_ip4 == proxy_server.addr {
-        debug!(&ctx, "proxy server ip need connect directly");
+    if user_ip4 == proxy_client.addr {
+        debug!(
+            &ctx,
+            "proxy client ip {}.{}.{}.{} need connect directly",
+            user_ip4[0],
+            user_ip4[1],
+            user_ip4[2],
+            user_ip4[3]
+        );
 
         return Ok(());
     }
@@ -74,11 +81,11 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
     debug!(
         &ctx,
         "get proxy server done {}.{}.{}.{}:{}",
-        proxy_server.addr[0],
-        proxy_server.addr[1],
-        proxy_server.addr[2],
-        proxy_server.addr[3],
-        proxy_server.port
+        proxy_client.addr[0],
+        proxy_client.addr[1],
+        proxy_client.addr[2],
+        proxy_client.addr[3],
+        proxy_client.port
     );
 
     let cookie = unsafe { bpf_get_socket_cookie(ctx.sock_addr as _) };
@@ -92,10 +99,18 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
 
     debug!(&ctx, "set cookie and origin dst ipv4 addr done");
 
-    sock_addr.user_ip4 = u32::from_be_bytes(proxy_server.addr).to_be();
-    sock_addr.user_port = proxy_server.port.to_be() as _;
+    sock_addr.user_ip4 = u32::from_be_bytes(proxy_client.addr).to_be();
+    sock_addr.user_port = proxy_client.port.to_be() as _;
 
     debug!(&ctx, "set user_ip4 and user_port to proxy server done");
 
     Ok(())
+}
+
+fn should_proxy(is_blacklist_mode: bool, in_list: bool) -> bool {
+    if is_blacklist_mode {
+        in_list
+    } else {
+        !in_list
+    }
 }
