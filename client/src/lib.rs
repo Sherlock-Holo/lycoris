@@ -14,6 +14,7 @@ use cidr::Ipv4Inet;
 use clap::Parser;
 use futures_util::io::BufReader;
 use futures_util::{AsyncBufReadExt, StreamExt};
+use share::map_name::*;
 use tokio::fs::File;
 use tokio::{fs, net};
 use tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
@@ -168,8 +169,8 @@ fn set_proxy_addr(bpf: &Bpf, addr: SocketAddr) -> Result<(), Error> {
     };
 
     let mut proxy_server: Array<_, Ipv4Addr> = bpf
-        .map_mut("PROXY_IPV4_SERVER")
-        .expect("PROXY_IPV4_SERVER bpf array not found")
+        .map_mut(PROXY_IPV4_CLIENT)
+        .expect("PROXY_IPV4_CLIENT bpf array not found")
         .try_into()?;
 
     let proxy_addr = Ipv4Addr {
@@ -185,7 +186,7 @@ fn set_proxy_addr(bpf: &Bpf, addr: SocketAddr) -> Result<(), Error> {
 
 async fn load_v4_listener(bpf: &mut Bpf, listen_addr: SocketAddr) -> Result<Listener, Error> {
     let map_ref_mut = bpf
-        .map_mut("IPV4_ADDR_MAP")
+        .map_mut(IPV4_ADDR_MAP)
         .expect("IPV4_ADDR_MAP bpf lru map not found");
 
     let listen_addr = match listen_addr {
@@ -251,7 +252,7 @@ async fn load_connector(
 
 async fn set_proxy_ip_list(bpf: &Bpf, ip_list: &Path) -> Result<(), Error> {
     let proxy_ipv4_list: LpmTrie<_, [u8; 4], u8> = bpf
-        .map_mut("PROXY_IPV4_LIST")
+        .map_mut(PROXY_IPV4_LIST)
         .expect("PROXY_IPV4_LIST not found")
         .try_into()?;
     let ip_list = File::open(ip_list).await?;
@@ -277,7 +278,7 @@ async fn set_proxy_ip_list(bpf: &Bpf, ip_list: &Path) -> Result<(), Error> {
 
 fn append_remote_ip_list(bpf: &Bpf, remote_domain_ip: &[SocketAddr]) -> Result<(), Error> {
     let proxy_ipv4_list: LpmTrie<_, [u8; 4], u8> = bpf
-        .map_mut("PROXY_IPV4_LIST")
+        .map_mut(PROXY_IPV4_LIST)
         .expect("PROXY_IPV4_LIST not found")
         .try_into()?;
 
@@ -296,7 +297,7 @@ fn append_remote_ip_list(bpf: &Bpf, remote_domain_ip: &[SocketAddr]) -> Result<(
 
 fn set_proxy_ip_list_mode(bpf: &Bpf, blacklist_mode: bool) -> Result<(), Error> {
     let mut proxy_ipv4_list_mode: Array<_, u8> = bpf
-        .map_mut("PROXY_IPV4_LIST_MODE")
+        .map_mut(PROXY_IPV4_LIST_MODE)
         .expect("PROXY_IPV4_LIST_MODE not found")
         .try_into()?;
 

@@ -6,6 +6,8 @@ use std::task::{Context, Poll};
 use bytes::{Buf, BufMut, BytesMut};
 use futures_util::{ready, AsyncRead, Stream, StreamExt};
 use h2::RecvStream;
+use tap::TapFallible;
+use tracing::error;
 
 use crate::helper::h2_err_to_io_err;
 
@@ -59,9 +61,15 @@ where
         }
 
         if let Some(result) = ready!(self.stream.poll_next_unpin(cx)) {
-            let data = result.map_err(h2_err_to_io_err)?;
+            let data = result.map_err(|err| {
+                error!(%err, "poll next unpin failed");
 
-            self.stream.release_capacity(data.len())?;
+                h2_err_to_io_err(err)
+            })?;
+
+            self.stream
+                .release_capacity(data.len())
+                .tap_err(|err| error!(%err, "release capacity failed"))?;
             self.buf.put_slice(data.deref());
 
             self.poll_read(cx, buf)

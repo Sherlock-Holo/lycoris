@@ -7,6 +7,7 @@ use bytes::{Buf, Bytes};
 use futures_util::{ready, AsyncWrite};
 use h2::{Reason, SendStream};
 use http::HeaderMap;
+use tracing::error;
 
 use crate::helper::h2_err_to_io_err;
 
@@ -64,15 +65,15 @@ impl<B: Buf> LimitedSendStream<B> for SendStream<B> {
 }
 
 #[derive(Debug)]
-pub struct AsyncWriteSendStream<S>(S);
+pub struct AsyncWriteSendStream<S: LimitedSendStream<Bytes> + Unpin>(S);
 
-impl<S> AsyncWriteSendStream<S> {
+impl<S: LimitedSendStream<Bytes> + Unpin> AsyncWriteSendStream<S> {
     pub fn new(send_stream: S) -> Self {
         Self(send_stream)
     }
 }
 
-impl<S: LimitedSendStream<Bytes>> AsyncWriteSendStream<S> {
+impl<S: LimitedSendStream<Bytes> + Unpin> AsyncWriteSendStream<S> {
     fn send_data(&mut self, data: &[u8], capacity: usize) -> io::Result<usize> {
         let write_size = capacity.min(data.len());
 
@@ -80,6 +81,8 @@ impl<S: LimitedSendStream<Bytes>> AsyncWriteSendStream<S> {
             .0
             .send_data(Bytes::copy_from_slice(&data[..write_size]), false)
         {
+            error!(%err, "send data failed");
+
             Err(h2_err_to_io_err(err))
         } else {
             Ok(write_size)
@@ -88,8 +91,15 @@ impl<S: LimitedSendStream<Bytes>> AsyncWriteSendStream<S> {
 
     fn check_reset(&mut self, cx: &mut Context<'_>) -> io::Result<()> {
         match self.0.poll_reset(cx) {
-            Poll::Ready(Err(err)) => Err(h2_err_to_io_err(err)),
+            Poll::Ready(Err(err)) => {
+                error!(%err, "check reset failed");
+
+                Err(h2_err_to_io_err(err))
+            }
+
             Poll::Ready(Ok(reason)) => {
+                error!(%reason, "check reset done, get reset reason");
+
                 let err = match reason {
                     Reason::NO_ERROR | Reason::CONNECT_ERROR => {
                         io::Error::from(ErrorKind::BrokenPipe)
@@ -134,7 +144,11 @@ impl<S: LimitedSendStream<Bytes> + Unpin> AsyncWrite for AsyncWriteSendStream<S>
 
         let increased_capacity = match ready!(this.0.poll_capacity(cx)) {
             None => return Poll::Ready(Err(io::Error::from(ErrorKind::UnexpectedEof))),
-            Some(Err(err)) => return Poll::Ready(Err(h2_err_to_io_err(err))),
+            Some(Err(err)) => {
+                error!(%err, "poll capacity failed");
+
+                return Poll::Ready(Err(h2_err_to_io_err(err)));
+            }
             Some(Ok(capacity)) => capacity,
         };
 
@@ -151,12 +165,20 @@ impl<S: LimitedSendStream<Bytes> + Unpin> AsyncWrite for AsyncWriteSendStream<S>
     }
 
     fn poll_close(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        self.0
-            .send_trailers(HeaderMap::new())
-            .map_err(h2_err_to_io_err)?;
+        self.0.send_trailers(HeaderMap::new()).map_err(|err| {
+            error!(%err, "send trailers failed");
+
+            h2_err_to_io_err(err)
+        })?;
 
         // should we need to call check_reset?
         Poll::Ready(Ok(()))
+    }
+}
+
+impl<S: LimitedSendStream<Bytes> + Unpin> Drop for AsyncWriteSendStream<S> {
+    fn drop(&mut self) {
+        let _ = self.0.send_trailers(HeaderMap::new());
     }
 }
 

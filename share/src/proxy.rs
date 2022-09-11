@@ -21,7 +21,9 @@ where
     let task1 = tokio::spawn(async move {
         io::copy(client_in_stream, &mut remote_out_stream)
             .await
-            .tap_err(|err| error!(%err, "copy data from in_stream to tcp failed"))?;
+            .tap_err(
+                |err| error!(%err, "copy data from client_in_stream to remote_out_stream failed"),
+            )?;
 
         remote_out_stream.close().await
     })
@@ -30,7 +32,9 @@ where
     let task2 = tokio::spawn(async move {
         io::copy(remote_in_stream, &mut client_out_stream)
             .await
-            .tap_err(|err| error!(%err, "copy data from tcp to out_stream failed"))?;
+            .tap_err(
+                |err| error!(%err, "copy data from remote_in_stream to client_out_stream failed"),
+            )?;
 
         client_out_stream.close().await
     })

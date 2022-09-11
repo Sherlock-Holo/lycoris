@@ -17,8 +17,9 @@ use client::bpf_share::Ipv4Addr;
 use client::{Client, Connector, Listener, TokenGenerator};
 use futures_util::StreamExt;
 use h2::server;
-use http::Response;
+use http::{HeaderMap, Response};
 use nix::unistd::getuid;
+use share::map_name::*;
 use tokio::fs;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
@@ -59,6 +60,7 @@ async fn main() {
     init_bpf_log(&mut bpf);
 
     set_proxy_addr(&mut bpf, listen_addr);
+    set_proxy_ip_list_mode(&bpf);
     load_target_ip(&mut bpf);
 
     let _connect4_link = load_connect4(&mut bpf, Path::new(CGROUP_PATH)).await;
@@ -66,7 +68,7 @@ async fn main() {
 
     let h2_server_addr = start_server().await;
 
-    info!("start server");
+    info!(%h2_server_addr, "start server");
 
     let listener = load_v4_listener(&mut bpf, listen_addr).await;
     let connector = load_connector(
@@ -95,7 +97,7 @@ async fn main() {
     let mut buf = vec![0; 4];
     let n = tcp_stream.read_exact(&mut buf).await.unwrap();
 
-    info!("read data {}", String::from_utf8_lossy(&buf[..n]));
+    assert_eq!(&buf[..n], b"test");
 }
 
 async fn start_server() -> SocketAddr {
@@ -133,6 +135,8 @@ async fn start_server() -> SocketAddr {
                 send_stream
                     .send_data(Bytes::from_static(b"test"), false)
                     .unwrap();
+
+                send_stream.send_trailers(HeaderMap::new()).unwrap();
             });
         }
     });
@@ -149,7 +153,7 @@ async fn load_certs(path: &Path) -> Vec<Certificate> {
 
 async fn load_keys(path: &Path) -> Vec<PrivateKey> {
     let keys = fs::read(path).await.unwrap();
-    let mut keys = rustls_pemfile::rsa_private_keys(&mut keys.as_slice()).unwrap();
+    let mut keys = rustls_pemfile::pkcs8_private_keys(&mut keys.as_slice()).unwrap();
 
     keys.drain(..).map(PrivateKey).collect()
 }
@@ -235,18 +239,18 @@ async fn load_established_sockops(bpf: &mut Bpf, cgroup_path: &Path) -> Box<dyn 
 
     prog.load().unwrap();
 
-    println!("loaded established_connect done");
+    info!("loaded established_connect done");
 
     let link_id = prog.attach(cgroup_file).unwrap();
 
-    println!("attach established_connect done");
+    info!("attach established_connect done");
 
     Box::new(prog.take_link(link_id).unwrap())
 }
 
 fn load_target_ip(bpf: &mut Bpf) {
     let proxy_ipv4_list: LpmTrie<_, [u8; 4], u8> = bpf
-        .map_mut("PROXY_IPV4_LIST")
+        .map_mut(PROXY_IPV4_LIST)
         .expect("PROXY_IPV4_LIST not found")
         .try_into()
         .unwrap();
@@ -267,8 +271,8 @@ fn load_target_ip(bpf: &mut Bpf) {
 
 fn set_proxy_addr(bpf: &mut Bpf, addr: SocketAddrV4) {
     let mut proxy_server: Array<_, Ipv4Addr> = bpf
-        .map_mut("PROXY_SERVER")
-        .expect("PROXY_SERVER bpf array not found")
+        .map_mut(PROXY_IPV4_CLIENT)
+        .expect("PROXY_IPV4_CLIENT bpf array not found")
         .try_into()
         .unwrap();
 
@@ -279,6 +283,16 @@ fn set_proxy_addr(bpf: &mut Bpf, addr: SocketAddrV4) {
     };
 
     proxy_server.set(0, proxy_addr, 0).unwrap();
+}
+
+fn set_proxy_ip_list_mode(bpf: &Bpf) {
+    let mut proxy_ipv4_list_mode: Array<_, u8> = bpf
+        .map_mut(PROXY_IPV4_LIST_MODE)
+        .expect("PROXY_IPV4_LIST_MODE not found")
+        .try_into()
+        .unwrap();
+
+    proxy_ipv4_list_mode.set(0, 0u8, 0).unwrap();
 }
 
 fn init_log() {
