@@ -65,11 +65,17 @@ impl<B: Buf> LimitedSendStream<B> for SendStream<B> {
 }
 
 #[derive(Debug)]
-pub struct AsyncWriteSendStream<S: LimitedSendStream<Bytes> + Unpin>(S);
+pub struct AsyncWriteSendStream<S: LimitedSendStream<Bytes> + Unpin> {
+    send_stream: S,
+    trailer_is_sent: bool,
+}
 
 impl<S: LimitedSendStream<Bytes> + Unpin> AsyncWriteSendStream<S> {
     pub fn new(send_stream: S) -> Self {
-        Self(send_stream)
+        Self {
+            send_stream,
+            trailer_is_sent: false,
+        }
     }
 }
 
@@ -78,7 +84,7 @@ impl<S: LimitedSendStream<Bytes> + Unpin> AsyncWriteSendStream<S> {
         let write_size = capacity.min(data.len());
 
         if let Err(err) = self
-            .0
+            .send_stream
             .send_data(Bytes::copy_from_slice(&data[..write_size]), false)
         {
             error!(%err, "send data failed");
@@ -90,7 +96,7 @@ impl<S: LimitedSendStream<Bytes> + Unpin> AsyncWriteSendStream<S> {
     }
 
     fn check_reset(&mut self, cx: &mut Context<'_>) -> io::Result<()> {
-        match self.0.poll_reset(cx) {
+        match self.send_stream.poll_reset(cx) {
             Poll::Ready(Err(err)) => {
                 error!(%err, "check reset failed");
 
@@ -134,15 +140,15 @@ impl<S: LimitedSendStream<Bytes> + Unpin> AsyncWrite for AsyncWriteSendStream<S>
         // check peer close or not
         this.check_reset(cx)?;
 
-        if this.0.capacity() > 0 {
-            let n = this.send_data(buf, this.0.capacity())?;
+        if this.send_stream.capacity() > 0 {
+            let n = this.send_data(buf, this.send_stream.capacity())?;
 
             return Poll::Ready(Ok(n));
         }
 
-        this.0.reserve_capacity(buf.len());
+        this.send_stream.reserve_capacity(buf.len());
 
-        let increased_capacity = match ready!(this.0.poll_capacity(cx)) {
+        let increased_capacity = match ready!(this.send_stream.poll_capacity(cx)) {
             None => return Poll::Ready(Err(io::Error::from(ErrorKind::UnexpectedEof))),
             Some(Err(err)) => {
                 error!(%err, "poll capacity failed");
@@ -165,11 +171,15 @@ impl<S: LimitedSendStream<Bytes> + Unpin> AsyncWrite for AsyncWriteSendStream<S>
     }
 
     fn poll_close(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        self.0.send_trailers(HeaderMap::new()).map_err(|err| {
-            error!(%err, "send trailers failed");
+        self.trailer_is_sent = true;
 
-            h2_err_to_io_err(err)
-        })?;
+        self.send_stream
+            .send_trailers(HeaderMap::new())
+            .map_err(|err| {
+                error!(%err, "send trailers failed");
+
+                h2_err_to_io_err(err)
+            })?;
 
         // should we need to call check_reset?
         Poll::Ready(Ok(()))
@@ -178,7 +188,9 @@ impl<S: LimitedSendStream<Bytes> + Unpin> AsyncWrite for AsyncWriteSendStream<S>
 
 impl<S: LimitedSendStream<Bytes> + Unpin> Drop for AsyncWriteSendStream<S> {
     fn drop(&mut self) {
-        let _ = self.0.send_trailers(HeaderMap::new());
+        if !self.trailer_is_sent {
+            let _ = self.send_stream.send_trailers(HeaderMap::new());
+        }
     }
 }
 
@@ -254,13 +266,21 @@ mod tests {
 
         async_write_send_stream.write_all(b"test").await.unwrap();
         assert_eq!(
-            async_write_send_stream.0.buf.copy_to_bytes(4).as_ref(),
+            async_write_send_stream
+                .send_stream
+                .buf
+                .copy_to_bytes(4)
+                .as_ref(),
             b"test"
         );
 
         async_write_send_stream.write_all(b"123").await.unwrap();
         assert_eq!(
-            async_write_send_stream.0.buf.copy_to_bytes(3).as_ref(),
+            async_write_send_stream
+                .send_stream
+                .buf
+                .copy_to_bytes(3)
+                .as_ref(),
             b"123"
         );
 
