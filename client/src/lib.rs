@@ -1,6 +1,6 @@
 use std::any::Any;
 use std::io;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
 use std::str::FromStr;
 
@@ -15,8 +15,8 @@ use clap::Parser;
 use futures_util::io::BufReader;
 use futures_util::{AsyncBufReadExt, StreamExt};
 use share::map_name::*;
+use tokio::fs;
 use tokio::fs::File;
-use tokio::{fs, net};
 use tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
 use tokio_rustls::webpki::TrustAnchor;
 use tokio_util::compat::TokioAsyncReadCompatExt;
@@ -26,6 +26,7 @@ use tracing_log::LogTracer;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{fmt, Registry};
+use trust_dns_resolver::AsyncResolver;
 use webpki_roots::TLS_SERVER_ROOTS;
 
 use crate::args::Args;
@@ -57,9 +58,7 @@ pub async fn run() -> Result<(), Error> {
 
     info!(?config, "load config done");
 
-    let remote_domain_ips = net::lookup_host(&config.remote_domain)
-        .await?
-        .collect::<Vec<_>>();
+    let remote_domain_ips = get_remote_domain_ips(&config.remote_domain).await?;
 
     info!(?remote_domain_ips, "get remote domain ip done");
 
@@ -276,20 +275,20 @@ async fn set_proxy_ip_list(bpf: &Bpf, ip_list: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-fn append_remote_ip_list(bpf: &Bpf, remote_domain_ip: &[SocketAddr]) -> Result<(), Error> {
+fn append_remote_ip_list(bpf: &Bpf, remote_domain_ip: &[IpAddr]) -> Result<(), Error> {
     let proxy_ipv4_list: LpmTrie<_, [u8; 4], u8> = bpf
         .map_mut(PROXY_IPV4_LIST)
         .expect("PROXY_IPV4_LIST not found")
         .try_into()?;
 
     for ipv4_addr in remote_domain_ip.iter().filter_map(|addr| {
-        if let SocketAddr::V4(addr) = addr {
+        if let IpAddr::V4(addr) = addr {
             Some(addr)
         } else {
             None
         }
     }) {
-        proxy_ipv4_list.insert(&Key::new(32, ipv4_addr.ip().octets()), 1, 0)?;
+        proxy_ipv4_list.insert(&Key::new(32, ipv4_addr.octets()), 1, 0)?;
     }
 
     Ok(())
@@ -306,6 +305,16 @@ fn set_proxy_ip_list_mode(bpf: &Bpf, blacklist_mode: bool) -> Result<(), Error> 
     proxy_ipv4_list_mode.set(0, mode, 0)?;
 
     Ok(())
+}
+
+async fn get_remote_domain_ips(domain: &str) -> Result<Vec<IpAddr>, Error> {
+    let async_resolver = AsyncResolver::tokio_from_system_conf()?;
+
+    Ok(async_resolver
+        .lookup_ip(domain)
+        .await?
+        .into_iter()
+        .collect())
 }
 
 fn init_log(debug: bool) {

@@ -2,6 +2,7 @@ use std::io::Error as IoError;
 
 use aya::maps::MapError;
 use thiserror::Error;
+use trust_dns_resolver::error::ResolveError;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -25,6 +26,9 @@ pub enum Error {
 
     #[error("bpf program error: {0}")]
     BpfProgram(#[from] aya::programs::ProgramError),
+
+    #[error("resolve dns failed: {0}")]
+    DnsResolve(#[from] ResolveError),
 
     #[error(transparent)]
     Other(Box<dyn std::error::Error + Send + Sync + 'static>),
