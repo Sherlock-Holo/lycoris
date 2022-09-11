@@ -64,7 +64,7 @@ async fn load_certs(path: &Path) -> Result<Vec<Certificate>, Error> {
 
 async fn load_keys(path: &Path) -> Result<Vec<PrivateKey>, Error> {
     let keys = fs::read(path).await?;
-    let mut keys = rustls_pemfile::rsa_private_keys(&mut keys.as_slice())
+    let mut keys = rustls_pemfile::pkcs8_private_keys(&mut keys.as_slice())
         .map_err(|err| Error::Other(err.into()))?;
 
     Ok(keys.drain(..).map(PrivateKey).collect())

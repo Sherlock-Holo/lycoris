@@ -161,7 +161,7 @@ async fn load_certs(path: &Path) -> Vec<Certificate> {
 
 async fn load_keys(path: &Path) -> Vec<PrivateKey> {
     let keys = fs::read(path).await.unwrap();
-    let mut keys = rustls_pemfile::rsa_private_keys(&mut keys.as_slice()).unwrap();
+    let mut keys = rustls_pemfile::pkcs8_private_keys(&mut keys.as_slice()).unwrap();
 
     keys.drain(..).map(PrivateKey).collect()
 }
