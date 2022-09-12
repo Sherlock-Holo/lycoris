@@ -8,7 +8,7 @@ use futures_util::future::poll_fn;
 use futures_util::StreamExt;
 use h2::client;
 use http::{HeaderMap, HeaderValue, Request};
-use server::{Auth, Server};
+use lycoris_server::{Auth, Server};
 use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};

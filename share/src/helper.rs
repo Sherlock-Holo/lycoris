@@ -1,4 +1,6 @@
 use std::io::{Error, ErrorKind};
+use std::mem::transmute;
+use std::net::Ipv6Addr;
 
 use h2::Reason;
 
@@ -21,5 +23,16 @@ pub fn h2_err_to_io_err(err: h2::Error) -> Error {
 
             reason => Error::new(ErrorKind::Other, reason.description()),
         }
+    }
+}
+
+pub trait Ipv6AddrExt {
+    fn network_order_segments(&self) -> [u16; 8];
+}
+
+impl Ipv6AddrExt for Ipv6Addr {
+    fn network_order_segments(&self) -> [u16; 8] {
+        // SAFETY: `[u8; 16]` is always safe to transmute to `[u16; 8]`.
+        unsafe { transmute::<_, [u16; 8]>(self.octets()) }
     }
 }

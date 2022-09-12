@@ -1,4 +1,5 @@
 listen_addr: 127.0.0.1:1980
+listen_addr_v6: [ ::1 ]:1980
 remote_domain: example.com
 remote_port: 443
 ca_cert: example/ca.cert

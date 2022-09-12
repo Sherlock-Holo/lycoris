@@ -1,4 +1,4 @@
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::time::Duration;
 
 use aya::maps::{HashMap, MapError, MapRefMut};
@@ -8,7 +8,9 @@ use tokio::sync::RwLock;
 use tokio::time;
 use tracing::error;
 
-use crate::bpf_share::{ConnectedIpv4Addr, Ipv4Addr as ShareIpv4Addr};
+use crate::bpf_share::{
+    ConnectedIpv4Addr, ConnectedIpv6Addr, Ipv4Addr as ShareIpv4Addr, Ipv6Addr as ShareIpv6Addr,
+};
 use crate::err::Error;
 
 pub trait LimitedBpfHashMap<K: Pod, V: Pod> {
@@ -64,6 +66,52 @@ impl<Map: LimitedBpfHashMap<ConnectedIpv4Addr, ShareIpv4Addr>> DstAddrLookup<Map
                     let dst_addr = SocketAddr::V4(SocketAddrV4::new(
                         Ipv4Addr::from(dst_ipv4_addr.addr),
                         dst_ipv4_addr.port,
+                    ));
+
+                    drop(map);
+
+                    self.dst_addr_map.write().await.remove(connected_addr).tap_err(
+                        |err| error!(%err, ?connected_addr, "remove dst addr by v4 addr failed"),
+                    )?;
+
+                    return Ok(Some(dst_addr));
+                }
+            }
+        }
+
+        error!(?connected_addr, "dst addr not found");
+
+        Ok(None)
+    }
+}
+
+impl<Map: LimitedBpfHashMap<ConnectedIpv6Addr, ShareIpv6Addr>> DstAddrLookup<Map> {
+    pub async fn lookup_v6(
+        &self,
+        connected_addr: &ConnectedIpv6Addr,
+        max_retry: usize,
+    ) -> Result<Option<SocketAddr>, Error> {
+        for _ in 0..max_retry {
+            let map = self.dst_addr_map.read().await;
+            match map.get(connected_addr) {
+                Err(MapError::KeyNotFound) => {
+                    time::sleep(Duration::from_millis(50)).await;
+
+                    continue;
+                }
+
+                Err(err) => {
+                    error!(%err, ?connected_addr, "get dst addr from connected v6 addr failed");
+
+                    return Err(err.into());
+                }
+
+                Ok(dst_ipv6_addr) => {
+                    let dst_addr = SocketAddr::V6(SocketAddrV6::new(
+                        Ipv6Addr::from(dst_ipv6_addr.addr),
+                        dst_ipv6_addr.port,
+                        0,
+                        0,
                     ));
 
                     drop(map);

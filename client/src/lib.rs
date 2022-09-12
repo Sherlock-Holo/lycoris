@@ -1,6 +1,6 @@
 use std::any::Any;
 use std::io;
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, SocketAddrV4, SocketAddrV6};
 use std::path::Path;
 use std::str::FromStr;
 
@@ -10,10 +10,11 @@ use aya::programs::cgroup_sock_addr::CgroupSockAddrLink;
 use aya::programs::{CgroupSockAddr, OwnedLink, SockOps};
 use aya::Bpf;
 use aya_log::BpfLogger;
-use cidr::Ipv4Inet;
+use cidr::{Ipv4Inet, Ipv6Inet};
 use clap::Parser;
 use futures_util::io::BufReader;
 use futures_util::{AsyncBufReadExt, StreamExt};
+use share::helper::Ipv6AddrExt;
 use share::map_name::*;
 use tokio::fs;
 use tokio::fs::File;
@@ -30,7 +31,7 @@ use trust_dns_resolver::AsyncResolver;
 use webpki_roots::TLS_SERVER_ROOTS;
 
 use crate::args::Args;
-use crate::bpf_share::Ipv4Addr;
+use crate::bpf_share::{Ipv4Addr, Ipv6Addr};
 pub use crate::client::Client;
 use crate::config::Config;
 pub use crate::connect::Connector;
@@ -66,7 +67,7 @@ pub async fn run() -> Result<(), Error> {
 
     init_bpf_log(&mut bpf);
 
-    set_proxy_addr(&bpf, config.listen_addr)?;
+    set_proxy_addr(&bpf, config.listen_addr, config.listen_addr_v6)?;
 
     info!(listen_addr = %config.listen_addr, "set proxy addr done");
 
@@ -89,13 +90,15 @@ pub async fn run() -> Result<(), Error> {
 
     info!("load connect4 done");
 
+    let _connect6_link = load_connect6(&mut bpf, &config.cgroup_path).await?;
+
     let _sockops_link = load_established_sockops(&mut bpf, &config.cgroup_path).await?;
 
     info!("load sockops done");
 
-    let v4_listener = load_v4_listener(&mut bpf, config.listen_addr).await?;
+    let v4_listener = load_listener(&mut bpf, config.listen_addr, config.listen_addr_v6).await?;
 
-    info!("load v4 listener done");
+    info!("load listener done");
 
     let connector = load_connector(
         &config.remote_domain,
@@ -135,6 +138,28 @@ async fn load_connect4(
     Ok(connect4_prog.take_link(connect4_link_id)?)
 }
 
+async fn load_connect6(
+    bpf: &mut Bpf,
+    cgroup_path: &Path,
+) -> Result<OwnedLink<CgroupSockAddrLink>, Error> {
+    let cgroup_file = File::open(cgroup_path).await?;
+
+    let connect6_prog: &mut CgroupSockAddr = bpf
+        .program_mut("connect6")
+        .expect("bpf connect6 not found")
+        .try_into()?;
+
+    connect6_prog.load()?;
+
+    info!("load connect6 done");
+
+    let connect6_link_id = connect6_prog.attach(cgroup_file)?;
+
+    info!(?cgroup_path, "attach cgroup done");
+
+    Ok(connect6_prog.take_link(connect6_link_id)?)
+}
+
 // return Box<dyn Any> because the SockOpsLink is un-exported
 async fn load_established_sockops(
     bpf: &mut Bpf,
@@ -158,16 +183,8 @@ async fn load_established_sockops(
     Ok(Box::new(prog.take_link(link_id)?))
 }
 
-fn set_proxy_addr(bpf: &Bpf, addr: SocketAddr) -> Result<(), Error> {
-    let addr = match addr {
-        SocketAddr::V6(_) => {
-            return Err(Error::Other("ipv6 is unsupported yet".into()));
-        }
-
-        SocketAddr::V4(addr) => addr,
-    };
-
-    let mut proxy_server: Array<_, Ipv4Addr> = bpf
+fn set_proxy_addr(bpf: &Bpf, addr: SocketAddrV4, addr_v6: SocketAddrV6) -> Result<(), Error> {
+    let mut v4_proxy_server: Array<_, Ipv4Addr> = bpf
         .map_mut(PROXY_IPV4_CLIENT)
         .expect("PROXY_IPV4_CLIENT bpf array not found")
         .try_into()?;
@@ -178,22 +195,43 @@ fn set_proxy_addr(bpf: &Bpf, addr: SocketAddr) -> Result<(), Error> {
         _padding: [0; 2],
     };
 
-    proxy_server.set(0, proxy_addr, 0)?;
+    v4_proxy_server.set(0, proxy_addr, 0)?;
+
+    let mut v6_proxy_server: Array<_, Ipv6Addr> = bpf
+        .map_mut(PROXY_IPV6_CLIENT)
+        .expect("PROXY_IPV6_CLIENT bpf array not found")
+        .try_into()?;
+
+    let proxy_addr = Ipv6Addr {
+        addr: addr_v6.ip().network_order_segments(),
+        port: addr.port(),
+    };
+
+    v6_proxy_server.set(0, proxy_addr, 0)?;
 
     Ok(())
 }
 
-async fn load_v4_listener(bpf: &mut Bpf, listen_addr: SocketAddr) -> Result<Listener, Error> {
-    let map_ref_mut = bpf
+async fn load_listener(
+    bpf: &mut Bpf,
+    listen_addr: SocketAddrV4,
+    listen_addr_v6: SocketAddrV6,
+) -> Result<Listener, Error> {
+    let ipv4_map_ref_mut = bpf
         .map_mut(IPV4_ADDR_MAP)
         .expect("IPV4_ADDR_MAP bpf lru map not found");
 
-    let listen_addr = match listen_addr {
-        SocketAddr::V6(_) => unreachable!(),
-        SocketAddr::V4(listen_addr) => listen_addr,
-    };
+    let ipv6_map_ref_mut = bpf
+        .map_mut(IPV6_ADDR_MAP)
+        .expect("IPV6_ADDR_MAP bpf lru map not found");
 
-    Listener::new(listen_addr, map_ref_mut).await
+    Listener::new(
+        listen_addr,
+        listen_addr_v6,
+        ipv4_map_ref_mut,
+        ipv6_map_ref_mut,
+    )
+    .await
 }
 
 async fn load_connector(
@@ -258,6 +296,11 @@ async fn set_proxy_ip_list<'a, I: Iterator<Item = &'a Path>>(
         .expect("PROXY_IPV4_LIST not found")
         .try_into()?;
 
+    let proxy_ipv6_list: LpmTrie<_, [u16; 8], u8> = bpf
+        .map_mut(PROXY_IPV6_LIST)
+        .expect("PROXY_IPV6_LIST not found")
+        .try_into()?;
+
     for ip_list_path in ip_list_paths {
         let ip_list = File::open(ip_list_path).await?;
         let mut reader = BufReader::new(ip_list.compat()).lines();
@@ -265,16 +308,41 @@ async fn set_proxy_ip_list<'a, I: Iterator<Item = &'a Path>>(
         while let Some(result) = reader.next().await {
             let line = result?;
 
-            let ipv4_inet = Ipv4Inet::from_str(&line).map_err(|err| Error::Other(err.into()))?;
+            match Ipv4Inet::from_str(&line) {
+                Err(v4_err) => match Ipv6Inet::from_str(&line) {
+                    Err(v6_err) => {
+                        return Err(Error::Other(
+                            format!(
+                                "{} is not ipv4 cidr: {}, also not ipv6 cidr: {}",
+                                line, v4_err, v6_err
+                            )
+                            .into(),
+                        ));
+                    }
 
-            proxy_ipv4_list.insert(
-                &Key::new(
-                    ipv4_inet.network_length() as _,
-                    ipv4_inet.first_address().octets(),
-                ),
-                1,
-                0,
-            )?;
+                    Ok(ipv6_net) => {
+                        proxy_ipv6_list.insert(
+                            &Key::new(
+                                ipv6_net.network_length() as _,
+                                ipv6_net.first_address().network_order_segments(),
+                            ),
+                            1,
+                            0,
+                        )?;
+                    }
+                },
+
+                Ok(ipv4_inet) => {
+                    proxy_ipv4_list.insert(
+                        &Key::new(
+                            ipv4_inet.network_length() as _,
+                            ipv4_inet.first_address().octets(),
+                        ),
+                        1,
+                        0,
+                    )?;
+                }
+            }
         }
     }
 

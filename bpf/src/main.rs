@@ -13,6 +13,13 @@ fn cgroup_connect4(ctx: SockAddrContext) -> c_int {
     1
 }
 
+#[cgroup_sock_addr(connect6)]
+fn cgroup_connect6(ctx: SockAddrContext) -> c_int {
+    let _ = lycoris_bpf::handle_cgroup_connect6(ctx);
+
+    1
+}
+
 #[sock_ops(name = "established_connect")]
 fn established_connect(ctx: SockOpsContext) -> c_uint {
     let _ = lycoris_bpf::handle_sockops(ctx);
