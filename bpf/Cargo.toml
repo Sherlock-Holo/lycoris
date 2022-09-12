@@ -1,5 +1,5 @@
 [package]
-name = "bpf"
+name = "lycoris-bpf"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"

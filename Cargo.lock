@@ -193,15 +193,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bpf"
-version = "0.1.0"
-dependencies = [
- "aya-bpf",
- "aya-log-ebpf",
- "bindgen",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -288,38 +279,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2850f2f5a82cbf437dd5af4d49848fbdfc27c157c3d010345776f952765261c5"
 dependencies = [
  "os_str_bytes",
-]
-
-[[package]]
-name = "client"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "aya",
- "aya-log",
- "bytes",
- "cidr",
- "clap",
- "futures-channel",
- "futures-util",
- "h2",
- "http",
- "nix",
- "rustls-pemfile",
- "serde",
- "serde_yaml",
- "share",
- "tap",
- "thiserror",
- "tokio",
- "tokio-rustls",
- "tokio-util",
- "totp-rs",
- "tracing",
- "tracing-log",
- "tracing-subscriber",
- "trust-dns-resolver",
- "webpki-roots",
 ]
 
 [[package]]
@@ -724,6 +683,70 @@ dependencies = [
 ]
 
 [[package]]
+name = "lycoris-bpf"
+version = "0.1.0"
+dependencies = [
+ "aya-bpf",
+ "aya-log-ebpf",
+ "bindgen",
+]
+
+[[package]]
+name = "lycoris-client"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "aya",
+ "aya-log",
+ "bytes",
+ "cidr",
+ "clap",
+ "futures-channel",
+ "futures-util",
+ "h2",
+ "http",
+ "nix",
+ "rustls-pemfile",
+ "serde",
+ "serde_yaml",
+ "share",
+ "tap",
+ "thiserror",
+ "tokio",
+ "tokio-rustls",
+ "tokio-util",
+ "totp-rs",
+ "tracing",
+ "tracing-log",
+ "tracing-subscriber",
+ "trust-dns-resolver",
+ "webpki-roots",
+]
+
+[[package]]
+name = "lycoris-server"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "clap",
+ "futures-util",
+ "h2",
+ "http",
+ "rustls-pemfile",
+ "serde",
+ "serde_yaml",
+ "share",
+ "tap",
+ "thiserror",
+ "tokio",
+ "tokio-rustls",
+ "tokio-util",
+ "totp-rs",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "match_cfg"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1089,29 +1112,6 @@ dependencies = [
  "ryu",
  "serde",
  "unsafe-libyaml",
-]
-
-[[package]]
-name = "server"
-version = "0.1.0"
-dependencies = [
- "bytes",
- "clap",
- "futures-util",
- "h2",
- "http",
- "rustls-pemfile",
- "serde",
- "serde_yaml",
- "share",
- "tap",
- "thiserror",
- "tokio",
- "tokio-rustls",
- "tokio-util",
- "totp-rs",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

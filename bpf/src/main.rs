@@ -8,14 +8,14 @@ use aya_bpf::programs::{SockAddrContext, SockOpsContext};
 
 #[cgroup_sock_addr(connect4)]
 fn cgroup_connect4(ctx: SockAddrContext) -> c_int {
-    let _ = bpf::handle_cgroup_connect4(ctx);
+    let _ = lycoris_bpf::handle_cgroup_connect4(ctx);
 
     1
 }
 
 #[sock_ops(name = "established_connect")]
 fn established_connect(ctx: SockOpsContext) -> c_uint {
-    let _ = bpf::handle_sockops(ctx);
+    let _ = lycoris_bpf::handle_sockops(ctx);
 
     1
 }

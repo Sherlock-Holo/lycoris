@@ -1,6 +1,6 @@
-use server::Error;
+use lycoris_server::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    server::run().await
+    lycoris_server::run().await
 }
