@@ -70,7 +70,7 @@ pub async fn run() -> Result<(), Error> {
 
     info!(listen_addr = %config.listen_addr, "set proxy addr done");
 
-    set_proxy_ip_list(&bpf, &args.ip_list).await?;
+    set_proxy_ip_list(&bpf, config.ip_list.iter().map(|path| path.as_path())).await?;
 
     info!("set target ip done");
 
@@ -249,27 +249,33 @@ async fn load_connector(
     .await
 }
 
-async fn set_proxy_ip_list(bpf: &Bpf, ip_list: &Path) -> Result<(), Error> {
+async fn set_proxy_ip_list<'a, I: Iterator<Item = &'a Path>>(
+    bpf: &Bpf,
+    ip_list_paths: I,
+) -> Result<(), Error> {
     let proxy_ipv4_list: LpmTrie<_, [u8; 4], u8> = bpf
         .map_mut(PROXY_IPV4_LIST)
         .expect("PROXY_IPV4_LIST not found")
         .try_into()?;
-    let ip_list = File::open(ip_list).await?;
-    let mut reader = BufReader::new(ip_list.compat()).lines();
 
-    while let Some(result) = reader.next().await {
-        let line = result?;
+    for ip_list_path in ip_list_paths {
+        let ip_list = File::open(ip_list_path).await?;
+        let mut reader = BufReader::new(ip_list.compat()).lines();
 
-        let ipv4_inet = Ipv4Inet::from_str(&line).map_err(|err| Error::Other(err.into()))?;
+        while let Some(result) = reader.next().await {
+            let line = result?;
 
-        proxy_ipv4_list.insert(
-            &Key::new(
-                ipv4_inet.network_length() as _,
-                ipv4_inet.first_address().octets(),
-            ),
-            1,
-            0,
-        )?;
+            let ipv4_inet = Ipv4Inet::from_str(&line).map_err(|err| Error::Other(err.into()))?;
+
+            proxy_ipv4_list.insert(
+                &Key::new(
+                    ipv4_inet.network_length() as _,
+                    ipv4_inet.first_address().octets(),
+                ),
+                1,
+                0,
+            )?;
+        }
     }
 
     Ok(())

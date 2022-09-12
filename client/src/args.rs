@@ -12,10 +12,6 @@ pub struct Args {
     #[clap(short, long)]
     pub bpf_elf: PathBuf,
 
-    /// proxy ip list path
-    #[clap(short, long)]
-    pub ip_list: PathBuf,
-
     /// debug log
     #[clap(short, long, action)]
     pub debug: bool,

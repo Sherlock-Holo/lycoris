@@ -6,4 +6,6 @@ token_secret: test
 token_header: x-token
 cgroup_path: /sys/fs/cgroup
 blacklist_mode: false
-K
+ip_list:
+  - file1
+  - file2

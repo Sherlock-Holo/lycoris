@@ -14,6 +14,7 @@ pub struct Config {
     pub cgroup_path: PathBuf,
     #[serde(default = "default_blacklist_mode")]
     pub blacklist_mode: bool,
+    pub ip_list: Vec<PathBuf>,
 }
 
 #[inline]
