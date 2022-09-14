@@ -22,7 +22,7 @@ use tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
 use tokio_rustls::webpki::TrustAnchor;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 use tracing::level_filters::LevelFilter;
-use tracing::{info, subscriber};
+use tracing::{info, subscriber, warn};
 use tracing_log::LogTracer;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
@@ -311,13 +311,14 @@ async fn set_proxy_ip_list<'a, I: Iterator<Item = &'a Path>>(
             match Ipv4Inet::from_str(&line) {
                 Err(v4_err) => match Ipv6Inet::from_str(&line) {
                     Err(v6_err) => {
-                        return Err(Error::Other(
-                            format!(
-                                "{} is not ipv4 cidr: {}, also not ipv6 cidr: {}",
-                                line, v4_err, v6_err
-                            )
-                            .into(),
-                        ));
+                        warn!(
+                            %v4_err,
+                            %v6_err,
+                            ip_cidr = %line,
+                            "ip cidr is not ipv4 cidr or ipv6 cidr, ignore"
+                        );
+
+                        continue;
                     }
 
                     Ok(ipv6_net) => {
