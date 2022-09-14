@@ -13,7 +13,7 @@ use aya::programs::{CgroupSockAddr, OwnedLink, SockOps};
 use aya::Bpf;
 use aya_log::BpfLogger;
 use bytes::Bytes;
-use cidr::Ipv4Inet;
+use cidr::Ipv6Inet;
 use futures_util::StreamExt;
 use h2::server;
 use http::{HeaderMap, Response};
@@ -44,18 +44,18 @@ const TEST_LISTEN_ADDR: &str = "127.0.0.1:23333";
 const TEST_LISTEN_ADDR_V6: &str = "[::1]:23333";
 const TOKEN_SECRET: &str = "test";
 const TOKEN_HEADER: &str = "x-secret";
-const TEST_IP_CIDR: &str = "172.20.0.0/16";
-const TEST_TARGET_ADDR: &str = "172.20.0.1:80";
-const H2_SERVER_ADDR: &str = "127.0.0.1:0";
+const TEST_IP_CIDR: &str = "fd00::/8";
+const TEST_TARGET_ADDR: &str = "fd00::1:80";
+const H2_SERVER_ADDR_V6: &str = "[::1]:0";
 
 #[tokio::test]
 async fn main() {
     if env::var_os("TESTPROXY")
         .as_deref()
         .unwrap_or_else(|| OsStr::new(""))
-        != OsStr::new("4")
+        != OsStr::new("6")
     {
-        eprintln!("skip proxy");
+        eprintln!("skip proxy6");
 
         return;
     }
@@ -77,7 +77,7 @@ async fn main() {
     set_proxy_ip_list_blacklist_mode(&bpf);
     load_target_ip(&mut bpf);
 
-    let _connect4_link = load_connect4(&mut bpf, Path::new(CGROUP_PATH)).await;
+    let _connect6_link = load_connect6(&mut bpf, Path::new(CGROUP_PATH)).await;
     let _sockops_link = load_established_sockops(&mut bpf, Path::new(CGROUP_PATH)).await;
 
     let h2_server_addr = start_server().await;
@@ -123,7 +123,7 @@ async fn start_server() -> SocketAddr {
         .with_single_cert(certs, keys.remove(0))
         .unwrap();
 
-    let listener = TcpListener::bind(H2_SERVER_ADDR).await.unwrap();
+    let listener = TcpListener::bind(H2_SERVER_ADDR_V6).await.unwrap();
     let tls_acceptor = TlsAcceptor::from(Arc::new(server_config));
 
     let h2_server_addr = listener.local_addr().unwrap();
@@ -230,24 +230,24 @@ async fn load_listener(
         .unwrap()
 }
 
-async fn load_connect4(bpf: &mut Bpf, cgroup_path: &Path) -> OwnedLink<CgroupSockAddrLink> {
+async fn load_connect6(bpf: &mut Bpf, cgroup_path: &Path) -> OwnedLink<CgroupSockAddrLink> {
     let cgroup_file = File::open(cgroup_path).await.unwrap();
 
-    let connect4_prog: &mut CgroupSockAddr = bpf
-        .program_mut("connect4")
-        .expect("bpf connect4 not found")
+    let connect6_prog: &mut CgroupSockAddr = bpf
+        .program_mut("connect6")
+        .expect("bpf connect6 not found")
         .try_into()
         .unwrap();
 
-    connect4_prog.load().unwrap();
+    connect6_prog.load().unwrap();
 
-    info!("load connect4 done");
+    info!("load connect6 done");
 
-    let connect4_link_id = connect4_prog.attach(cgroup_file).unwrap();
+    let connect6_link_id = connect6_prog.attach(cgroup_file).unwrap();
 
     info!(?cgroup_path, "attach cgroup done");
 
-    connect4_prog.take_link(connect4_link_id).unwrap()
+    connect6_prog.take_link(connect6_link_id).unwrap()
 }
 
 // return Box<dyn Any> because the SockOpsLink is un-exported
@@ -272,19 +272,19 @@ async fn load_established_sockops(bpf: &mut Bpf, cgroup_path: &Path) -> Box<dyn 
 }
 
 fn load_target_ip(bpf: &mut Bpf) {
-    let proxy_ipv4_list: LpmTrie<_, [u8; 4], u8> = bpf
-        .map_mut(PROXY_IPV4_LIST)
+    let proxy_ipv6_list: LpmTrie<_, [u16; 8], u8> = bpf
+        .map_mut(PROXY_IPV6_LIST)
         .expect("PROXY_IPV4_LIST not found")
         .try_into()
         .unwrap();
 
-    let ipv4_inet = Ipv4Inet::from_str(TEST_IP_CIDR).unwrap();
+    let ipv6_inet = Ipv6Inet::from_str(TEST_IP_CIDR).unwrap();
 
-    proxy_ipv4_list
+    proxy_ipv6_list
         .insert(
             &Key::new(
-                ipv4_inet.network_length() as _,
-                ipv4_inet.first_address().octets(),
+                ipv6_inet.network_length() as _,
+                ipv6_inet.first_address().network_order_segments(),
             ),
             1,
             0,
