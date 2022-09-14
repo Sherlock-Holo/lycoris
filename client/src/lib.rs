@@ -13,7 +13,7 @@ use aya_log::BpfLogger;
 use cidr::{Ipv4Inet, Ipv6Inet};
 use clap::Parser;
 use futures_util::io::BufReader;
-use futures_util::{AsyncBufReadExt, StreamExt};
+use futures_util::{future, AsyncBufReadExt, StreamExt};
 use share::helper::Ipv6AddrExt;
 use share::map_name::*;
 use tokio::fs;
@@ -27,6 +27,7 @@ use tracing_log::LogTracer;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{fmt, Registry};
+use trust_dns_resolver::error::ResolveErrorKind;
 use trust_dns_resolver::AsyncResolver;
 use webpki_roots::TLS_SERVER_ROOTS;
 
@@ -393,13 +394,33 @@ async fn get_remote_domain_ips(domain: &str) -> Result<Vec<IpAddr>, Error> {
 
     let async_resolver = AsyncResolver::tokio_from_system_conf()?;
 
-    let ipv4lookup = async_resolver.ipv4_lookup(domain).await?;
-    let ipv6lookup = async_resolver.ipv6_lookup(domain).await?;
+    let ipv4_fut = async {
+        match async_resolver.ipv4_lookup(domain).await {
+            Err(err) if matches!(err.kind(), &ResolveErrorKind::NoRecordsFound { .. }) => Ok(None),
 
-    Ok(ipv4lookup
+            Err(err) => Err(Error::from(err)),
+
+            Ok(ipv4lookup) => Ok(Some(ipv4lookup)),
+        }
+    };
+
+    let ipv6_fut = async {
+        match async_resolver.ipv6_lookup(domain).await {
+            Err(err) if matches!(err.kind(), &ResolveErrorKind::NoRecordsFound { .. }) => Ok(None),
+
+            Err(err) => Err(Error::from(err)),
+
+            Ok(ipv6lookup) => Ok(Some(ipv6lookup)),
+        }
+    };
+
+    let (ipv4_lookup, ipv6_lookup) = future::try_join(ipv4_fut, ipv6_fut).await?;
+
+    Ok(ipv4_lookup
         .into_iter()
+        .flatten()
         .map(IpAddr::from)
-        .chain(ipv6lookup.into_iter().map(IpAddr::from))
+        .chain(ipv6_lookup.into_iter().flatten().map(IpAddr::from))
         .collect())
 }
 
