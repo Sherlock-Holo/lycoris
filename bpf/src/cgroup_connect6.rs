@@ -1,6 +1,7 @@
 use core::ffi::c_long;
 use core::mem;
 
+use aya_bpf::bindings::bpf_sock_addr;
 use aya_bpf::helpers::*;
 use aya_bpf::maps::lpm_trie::Key;
 use aya_bpf::programs::SockAddrContext;
@@ -21,7 +22,7 @@ pub fn handle_cgroup_connect6(ctx: SockAddrContext) -> Result<(), c_long> {
         return Ok(());
     }
 
-    let user_ipv6: [u16; 8] = unsafe { mem::transmute(sock_addr.user_ip6) };
+    let user_ipv6 = get_ipv6_segments(sock_addr);
     let key = Key::new(128, user_ipv6);
 
     let is_blacklist_mode = match PROXY_IPV4_LIST_MODE.get(0) {
@@ -35,7 +36,7 @@ pub fn handle_cgroup_connect6(ctx: SockAddrContext) -> Result<(), c_long> {
     };
 
     let in_list = PROXY_IPV6_LIST.get(&key).copied().unwrap_or(0) > 0;
-    if !should_proxy(is_blacklist_mode, in_list) {
+    if !crate::should_proxy(is_blacklist_mode, in_list) {
         debug!(
             &ctx,
             "{}:{}:{}:{}:{}:{}:{}:{} is direct connect ip",
@@ -127,7 +128,7 @@ pub fn handle_cgroup_connect6(ctx: SockAddrContext) -> Result<(), c_long> {
 
     debug!(&ctx, "set cookie and origin dst ipv6 addr done");
 
-    sock_addr.user_ip6 = unsafe { mem::transmute(proxy_client.addr) };
+    set_ipv6_segments(sock_addr, proxy_client.addr);
     sock_addr.user_port = proxy_client.port.to_be() as _;
 
     debug!(&ctx, "set user_ip6 and user_port to proxy server done");
@@ -135,10 +136,25 @@ pub fn handle_cgroup_connect6(ctx: SockAddrContext) -> Result<(), c_long> {
     Ok(())
 }
 
-fn should_proxy(is_blacklist_mode: bool, in_list: bool) -> bool {
-    if is_blacklist_mode {
-        in_list
-    } else {
-        !in_list
-    }
+#[inline]
+fn get_ipv6_segments(sock_addr: &bpf_sock_addr) -> [u16; 8] {
+    let addr = [
+        sock_addr.user_ip6[0],
+        sock_addr.user_ip6[1],
+        sock_addr.user_ip6[2],
+        sock_addr.user_ip6[3],
+    ];
+
+    // Safety: [u16; 8] equal [u32; 4]
+    unsafe { mem::transmute(addr) }
+}
+
+#[inline]
+fn set_ipv6_segments(sock_addr: &mut bpf_sock_addr, value: [u16; 8]) {
+    let value: [u32; 4] = unsafe { mem::transmute(value) };
+
+    sock_addr.user_ip6[0] = value[0];
+    sock_addr.user_ip6[1] = value[1];
+    sock_addr.user_ip6[2] = value[2];
+    sock_addr.user_ip6[3] = value[3];
 }

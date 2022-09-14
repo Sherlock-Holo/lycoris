@@ -382,12 +382,19 @@ fn set_proxy_ip_list_mode(bpf: &Bpf, blacklist_mode: bool) -> Result<(), Error> 
 }
 
 async fn get_remote_domain_ips(domain: &str) -> Result<Vec<IpAddr>, Error> {
+    if let Ok(ip_addr) = IpAddr::from_str(domain) {
+        return Ok(vec![ip_addr]);
+    }
+
     let async_resolver = AsyncResolver::tokio_from_system_conf()?;
 
-    Ok(async_resolver
-        .lookup_ip(domain)
-        .await?
+    let ipv4lookup = async_resolver.ipv4_lookup(domain).await?;
+    let ipv6lookup = async_resolver.ipv6_lookup(domain).await?;
+
+    Ok(ipv4lookup
         .into_iter()
+        .map(IpAddr::from)
+        .chain(ipv6lookup.into_iter().map(IpAddr::from))
         .collect())
 }
 

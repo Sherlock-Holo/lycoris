@@ -7,7 +7,7 @@ use aya_log_ebpf::debug;
 
 use crate::kernel_binding::require;
 use crate::map::*;
-use crate::Ipv4Addr;
+use crate::{should_proxy, Ipv4Addr};
 
 /// check connect ipv4 in proxy ipv4 list or not, if in list, save the origin dst ipv4 addr into
 /// DST_IPV4_ADDR_STORE with (cookie, origin_dst_ipv4_addr), otherwise let it connect directly
@@ -105,12 +105,4 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
     debug!(&ctx, "set user_ip4 and user_port to proxy server done");
 
     Ok(())
-}
-
-fn should_proxy(is_blacklist_mode: bool, in_list: bool) -> bool {
-    if is_blacklist_mode {
-        in_list
-    } else {
-        !in_list
-    }
 }

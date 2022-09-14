@@ -44,3 +44,12 @@ pub struct Ipv6Addr {
     pub addr: [u16; 8],
     pub port: u16,
 }
+
+#[inline]
+fn should_proxy(is_blacklist_mode: bool, in_list: bool) -> bool {
+    if is_blacklist_mode {
+        in_list
+    } else {
+        !in_list
+    }
+}

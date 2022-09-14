@@ -119,9 +119,9 @@ fn handle_ipv6(ctx: SockOpsContext) -> Result<(), c_long> {
         origin_dst_ipv6_addr.port
     );
 
-    let saddr: [u16; 8] = unsafe { mem::transmute(ctx.local_ip6()) };
+    let saddr = copy_local_ip6(&ctx);
     let sport = ctx.local_port() as u16;
-    let daddr: [u16; 8] = unsafe { mem::transmute(ctx.remote_ip6()) };
+    let daddr = copy_remote_ip6(&ctx);
     let dport = u32::from_be(ctx.remote_port()) as u16;
 
     debug!(
@@ -157,4 +157,30 @@ fn handle_ipv6(ctx: SockOpsContext) -> Result<(), c_long> {
     IPV6_ADDR_MAP.insert(&connected_ipv6_addr, &origin_dst_ipv6_addr, 0)?;
 
     Ok(())
+}
+
+fn copy_local_ip6(ctx: &SockOpsContext) -> [u16; 8] {
+    let ops = unsafe { &*ctx.ops };
+
+    let ip6 = [
+        ops.local_ip6[0],
+        ops.local_ip6[1],
+        ops.local_ip6[2],
+        ops.local_ip6[3],
+    ];
+
+    unsafe { mem::transmute(ip6) }
+}
+
+fn copy_remote_ip6(ctx: &SockOpsContext) -> [u16; 8] {
+    let ops = unsafe { &*ctx.ops };
+
+    let ip6 = [
+        ops.remote_ip6[0],
+        ops.remote_ip6[1],
+        ops.remote_ip6[2],
+        ops.remote_ip6[3],
+    ];
+
+    unsafe { mem::transmute(ip6) }
 }

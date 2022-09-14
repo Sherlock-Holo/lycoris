@@ -19,14 +19,14 @@ use share::async_write_send_stream::AsyncWriteSendStream;
 use tap::TapFallible;
 use tokio::io::{AsyncRead as TokioAsyncRead, AsyncWrite as TokioAsyncWrite};
 use tokio::net::TcpStream;
-use tokio::{net, time};
+use tokio::time;
 use tokio_rustls::rustls::{ClientConfig, ServerName};
 use tokio_rustls::{TlsConnector, TlsStream};
 use tracing::{error, info};
 
-use crate::addr;
 use crate::err::Error;
 use crate::token::TokenGenerator;
+use crate::{addr, get_remote_domain_ips};
 
 #[async_trait::async_trait]
 pub trait Connect {
@@ -68,17 +68,19 @@ impl Connector {
         token_generator: TokenGenerator,
         token_header: &str,
     ) -> Result<Self, Error> {
-        let remote_addrs = net::lookup_host(format!("{}:{}", remote_domain, remote_port))
-            .await?
-            .collect::<Vec<_>>();
-
-        if remote_addrs.is_empty() {
+        let remote_ip_addrs = get_remote_domain_ips(remote_domain).await?;
+        if remote_ip_addrs.is_empty() {
             return Err(
                 io::Error::new(ErrorKind::AddrNotAvailable, "remote addrs is empty").into(),
             );
         }
 
-        info!(?remote_addrs, "lookup remote_domain done");
+        info!(?remote_ip_addrs, "lookup remote_domain done");
+
+        let remote_addrs = remote_ip_addrs
+            .into_iter()
+            .map(|addr| SocketAddr::new(addr, remote_port))
+            .collect::<Vec<_>>();
 
         let remote_server_name = ServerName::try_from(remote_domain)
             .map_err(|err| io::Error::new(ErrorKind::InvalidInput, err))?;
