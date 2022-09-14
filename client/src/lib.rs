@@ -307,9 +307,13 @@ async fn set_proxy_ip_list<'a, I: Iterator<Item = &'a Path>>(
 
         while let Some(result) = reader.next().await {
             let line = result?;
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
 
-            match Ipv4Inet::from_str(&line) {
-                Err(v4_err) => match Ipv6Inet::from_str(&line) {
+            match Ipv4Inet::from_str(line) {
+                Err(v4_err) => match Ipv6Inet::from_str(line) {
                     Err(v6_err) => {
                         warn!(
                             %v4_err,
