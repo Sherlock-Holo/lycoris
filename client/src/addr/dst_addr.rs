@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use aya::maps::{HashMap, MapError, MapRefMut};
 use aya::Pod;
+use share::helper::ArrayExt;
 use tap::TapFallible;
 use tokio::sync::RwLock;
 use tokio::time;
@@ -108,7 +109,7 @@ impl<Map: LimitedBpfHashMap<ConnectedIpv6Addr, ShareIpv6Addr>> DstAddrLookup<Map
 
                 Ok(dst_ipv6_addr) => {
                     let dst_addr = SocketAddr::V6(SocketAddrV6::new(
-                        Ipv6Addr::from(dst_ipv6_addr.addr),
+                        Ipv6Addr::from(dst_ipv6_addr.addr.swap_bytes()),
                         dst_ipv6_addr.port,
                         0,
                         0,

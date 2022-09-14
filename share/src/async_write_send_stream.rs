@@ -189,7 +189,9 @@ impl<S: LimitedSendStream<Bytes> + Unpin> AsyncWrite for AsyncWriteSendStream<S>
 impl<S: LimitedSendStream<Bytes> + Unpin> Drop for AsyncWriteSendStream<S> {
     fn drop(&mut self) {
         if !self.trailer_is_sent {
-            let _ = self.send_stream.send_trailers(HeaderMap::new());
+            if let Err(err) = self.send_stream.send_trailers(HeaderMap::new()) {
+                error!(%err, "send trailers failed");
+            }
         }
     }
 }
