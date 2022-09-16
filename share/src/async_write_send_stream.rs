@@ -140,8 +140,9 @@ impl<S: LimitedSendStream<Bytes> + Unpin> AsyncWrite for AsyncWriteSendStream<S>
         // check peer close or not
         this.check_reset(cx)?;
 
-        if this.send_stream.capacity() > 0 {
-            let n = this.send_data(buf, this.send_stream.capacity())?;
+        let capacity = this.send_stream.capacity();
+        if capacity > 0 {
+            let n = this.send_data(buf, capacity)?;
 
             return Poll::Ready(Ok(n));
         }
