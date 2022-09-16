@@ -48,5 +48,5 @@ it just a simple txt like
 - [x] TCP4 proxy
 - [x] UDP4 proxy
 - [x] whitelist/blacklist ip mode switch
-- [ ] TCP6 proxy
-- [ ] UDP6 proxy
+- [x] TCP6 proxy
+- [x] UDP6 proxy
