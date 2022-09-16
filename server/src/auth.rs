@@ -38,7 +38,7 @@ mod tests {
 
     #[test]
     fn check_auth() {
-        let secret = "test-secret".to_string();
+        let secret = "test-secrettest-secret".to_string();
         let account_name = "test".to_string();
 
         let totp = TOTP::new(
@@ -63,7 +63,7 @@ mod tests {
 
     #[test]
     fn check_auth_with_different_account_name() {
-        let secret = "test-secret".to_string();
+        let secret = "test-secrettest-secret".to_string();
 
         let totp = TOTP::new(
             Algorithm::SHA512,

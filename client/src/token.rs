@@ -39,7 +39,7 @@ mod tests {
 
     #[test]
     fn test_generate_token() {
-        const TOKEN_SECRET: &str = "test";
+        const TOKEN_SECRET: &str = "testtesttesttest";
         const ACCOUNT_NAME: Option<String> = None;
 
         let token_generator =

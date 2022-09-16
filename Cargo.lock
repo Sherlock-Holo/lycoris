@@ -1342,15 +1342,17 @@ dependencies = [
 
 [[package]]
 name = "totp-rs"
-version = "2.0.1"
+version = "3.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9254defd2c9202c8e5a03e4120faa0c1e0cb8ed365fb5d7305a33d0b4cf571c"
+checksum = "c44da613dc546a6a3db824c5f1d6672d06e304a588e3816446abe13a68c3f72f"
 dependencies = [
  "base32",
  "constant_time_eq",
  "hmac",
  "sha-1",
  "sha2",
+ "url",
+ "urlencoding",
 ]
 
 [[package]]
@@ -1505,6 +1507,12 @@ dependencies = [
  "idna 0.3.0",
  "percent-encoding",
 ]
+
+[[package]]
+name = "urlencoding"
+version = "2.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8db7427f936968176eaa7cdf81b7f98b980b18495ec28f1b5791ac3bfe3eea9"
 
 [[package]]
 name = "valuable"

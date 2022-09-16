@@ -27,7 +27,7 @@ aya-log = { git = "https://github.com/aya-rs/aya-log", branch = "main" }
 tracing-log = "0.1"
 
 # auth
-totp-rs = "2"
+totp-rs = { version = "3", features = ["otpauth"] }
 
 # http/2
 h2 = { version = "0.3", features = ["stream"] }
