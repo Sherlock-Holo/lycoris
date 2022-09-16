@@ -126,7 +126,7 @@ fn handle_ipv6(ctx: SockOpsContext) -> Result<(), c_long> {
 
     debug!(
         &ctx,
-        "saddr {}:{}:{}:{}:{}:{}:{}:{} , daddr {}:{}:{}:{}:{}:{}:{}:{}",
+        "saddr [{}:{}:{}:{}:{}:{}:{}]:{} , daddr [{}:{}:{}:{}:{}:{}:{}]:{}",
         u16::from_be(saddr[0]),
         u16::from_be(saddr[1]),
         u16::from_be(saddr[2]),
