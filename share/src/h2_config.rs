@@ -1,0 +1,5 @@
+pub const INITIAL_WINDOW_SIZE: u32 = 10 * 1024 * 1024;
+// 10 MiB
+pub const INITIAL_CONNECTION_WINDOW_SIZE: u32 = 50 * 1024 * 1024;
+// 50 MiB
+pub const MAX_FRAME_SIZE: u32 = 4 * 1024 * 1024; // 4MiB

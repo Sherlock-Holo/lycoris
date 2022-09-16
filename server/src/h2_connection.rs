@@ -1,8 +1,9 @@
 use bytes::Bytes;
 use futures_util::future;
-use h2::server::{Connection as H2Connection, SendResponse};
-use h2::{server, RecvStream};
+use h2::server::{Builder, Connection as H2Connection, SendResponse};
+use h2::RecvStream;
 use http::Request;
+use share::h2_config::*;
 use tap::TapFallible;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tracing::{error, info};
@@ -18,7 +19,11 @@ where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
     pub async fn handshake(io: IO) -> Result<Self, Error> {
-        let h2_connection = server::handshake(io)
+        let h2_connection = Builder::new()
+            .initial_window_size(INITIAL_WINDOW_SIZE)
+            .initial_connection_window_size(INITIAL_CONNECTION_WINDOW_SIZE)
+            .max_frame_size(MAX_FRAME_SIZE)
+            .handshake(io)
             .await
             .tap_err(|err| error!(%err, "http/2 handshake failed"))?;
 
