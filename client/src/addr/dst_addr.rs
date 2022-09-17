@@ -5,7 +5,7 @@ use aya::maps::{HashMap, MapError, MapRefMut};
 use aya::Pod;
 use share::helper::ArrayExt;
 use tap::TapFallible;
-use tokio::sync::RwLock;
+use tokio::sync::Mutex;
 use tokio::time;
 use tracing::error;
 
@@ -31,13 +31,13 @@ impl<K: Pod, V: Pod> LimitedBpfHashMap<K, V> for HashMap<MapRefMut, K, V> {
 }
 
 pub struct DstAddrLookup<Map> {
-    dst_addr_map: RwLock<Map>,
+    dst_addr_map: Mutex<Map>,
 }
 
 impl<Map> DstAddrLookup<Map> {
     pub fn new(map: Map) -> Self {
         Self {
-            dst_addr_map: RwLock::new(map),
+            dst_addr_map: Mutex::new(map),
         }
     }
 }
@@ -49,7 +49,7 @@ impl<Map: LimitedBpfHashMap<ConnectedIpv4Addr, ShareIpv4Addr>> DstAddrLookup<Map
         max_retry: usize,
     ) -> Result<Option<SocketAddr>, Error> {
         for _ in 0..max_retry {
-            let map = self.dst_addr_map.read().await;
+            let mut map = self.dst_addr_map.lock().await;
             match map.get(connected_addr) {
                 Err(MapError::KeyNotFound) => {
                     time::sleep(Duration::from_millis(50)).await;
@@ -69,9 +69,7 @@ impl<Map: LimitedBpfHashMap<ConnectedIpv4Addr, ShareIpv4Addr>> DstAddrLookup<Map
                         dst_ipv4_addr.port,
                     ));
 
-                    drop(map);
-
-                    self.dst_addr_map.write().await.remove(connected_addr).tap_err(
+                    map.remove(connected_addr).tap_err(
                         |err| error!(%err, ?connected_addr, "remove dst addr by v4 addr failed"),
                     )?;
 
@@ -93,7 +91,7 @@ impl<Map: LimitedBpfHashMap<ConnectedIpv6Addr, ShareIpv6Addr>> DstAddrLookup<Map
         max_retry: usize,
     ) -> Result<Option<SocketAddr>, Error> {
         for _ in 0..max_retry {
-            let map = self.dst_addr_map.read().await;
+            let mut map = self.dst_addr_map.lock().await;
             match map.get(connected_addr) {
                 Err(MapError::KeyNotFound) => {
                     time::sleep(Duration::from_millis(50)).await;
@@ -115,9 +113,7 @@ impl<Map: LimitedBpfHashMap<ConnectedIpv6Addr, ShareIpv6Addr>> DstAddrLookup<Map
                         0,
                     ));
 
-                    drop(map);
-
-                    self.dst_addr_map.write().await.remove(connected_addr).tap_err(
+                    map.remove(connected_addr).tap_err(
                         |err| error!(%err, ?connected_addr, "remove dst addr by v4 addr failed"),
                     )?;
 
@@ -200,7 +196,7 @@ mod tests {
             SocketAddr::from_str("127.0.0.2:8080").unwrap()
         );
 
-        assert!(dst_addr_lookup.dst_addr_map.read().await.map.is_empty());
+        assert!(dst_addr_lookup.dst_addr_map.lock().await.map.is_empty());
     }
 
     #[tokio::test]
@@ -237,7 +233,7 @@ mod tests {
             SocketAddr::from_str("127.0.0.2:8080").unwrap()
         );
 
-        assert!(dst_addr_lookup.dst_addr_map.read().await.map.is_empty());
+        assert!(dst_addr_lookup.dst_addr_map.lock().await.map.is_empty());
     }
 
     #[tokio::test]
