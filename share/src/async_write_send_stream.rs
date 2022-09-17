@@ -137,29 +137,38 @@ impl<S: LimitedSendStream<Bytes> + Unpin> AsyncWrite for AsyncWriteSendStream<S>
 
         let this = self.get_mut();
 
-        // check peer close or not
-        this.check_reset(cx)?;
+        let capacity = loop {
+            // check peer close or not
+            this.check_reset(cx)?;
 
-        let capacity = this.send_stream.capacity();
-        if capacity > 0 {
-            let n = this.send_data(buf, capacity)?;
-
-            return Poll::Ready(Ok(n));
-        }
-
-        this.send_stream.reserve_capacity(buf.len());
-
-        let increased_capacity = match ready!(this.send_stream.poll_capacity(cx)) {
-            None => return Poll::Ready(Err(io::Error::from(ErrorKind::UnexpectedEof))),
-            Some(Err(err)) => {
-                error!(%err, "poll capacity failed");
-
-                return Poll::Ready(Err(h2_err_to_io_err(err)));
+            let mut capacity = this.send_stream.capacity();
+            if capacity > 0 {
+                break capacity;
             }
-            Some(Ok(capacity)) => capacity,
+
+            this.send_stream.reserve_capacity(buf.len());
+            capacity = this.send_stream.capacity();
+            if capacity > 0 {
+                break capacity;
+            }
+
+            match ready!(this.send_stream.poll_capacity(cx)) {
+                None => return Poll::Ready(Err(io::Error::from(ErrorKind::UnexpectedEof))),
+                Some(Err(err)) => {
+                    error!(%err, "poll capacity failed");
+
+                    return Poll::Ready(Err(h2_err_to_io_err(err)));
+                }
+
+                // sometimes h2 will return ready but increase size is 0, need check capacity again
+                Some(Ok(0)) => continue,
+
+                // capacity increase really, can get the capacity
+                Some(Ok(_)) => break this.send_stream.capacity(),
+            }
         };
 
-        let n = this.send_data(buf, increased_capacity)?;
+        let n = this.send_data(buf, capacity)?;
 
         Poll::Ready(Ok(n))
     }
