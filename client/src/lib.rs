@@ -1,6 +1,6 @@
 use std::any::Any;
 use std::io;
-use std::net::{IpAddr, SocketAddrV4, SocketAddrV6};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6};
 use std::path::Path;
 use std::str::FromStr;
 
@@ -32,7 +32,7 @@ use trust_dns_resolver::AsyncResolver;
 use webpki_roots::TLS_SERVER_ROOTS;
 
 use crate::args::Args;
-use crate::bpf_share::{Ipv4Addr, Ipv6Addr};
+use crate::bpf_share::{Ipv4Addr as ShareIpv4Addr, Ipv6Addr as ShareIpv6Addr};
 pub use crate::client::Client;
 use crate::config::Config;
 pub use crate::connect::Connector;
@@ -184,13 +184,22 @@ async fn load_established_sockops(
     Ok(Box::new(prog.take_link(link_id)?))
 }
 
-fn set_proxy_addr(bpf: &Bpf, addr: SocketAddrV4, addr_v6: SocketAddrV6) -> Result<(), Error> {
-    let mut v4_proxy_server: Array<_, Ipv4Addr> = bpf
+fn set_proxy_addr(
+    bpf: &Bpf,
+    mut addr: SocketAddrV4,
+    mut addr_v6: SocketAddrV6,
+) -> Result<(), Error> {
+    let mut v4_proxy_server: Array<_, ShareIpv4Addr> = bpf
         .map_mut(PROXY_IPV4_CLIENT)
         .expect("PROXY_IPV4_CLIENT bpf array not found")
         .try_into()?;
 
-    let proxy_addr = Ipv4Addr {
+    if *addr.ip() == Ipv4Addr::new(0, 0, 0, 0) {
+        // when set 0.0.0.0, we need bpf use 127.0.0.1 to connect local
+        addr.set_ip(Ipv4Addr::new(127, 0, 0, 1));
+    }
+
+    let proxy_addr = ShareIpv4Addr {
         addr: addr.ip().octets(),
         port: addr.port(),
         _padding: [0; 2],
@@ -198,12 +207,17 @@ fn set_proxy_addr(bpf: &Bpf, addr: SocketAddrV4, addr_v6: SocketAddrV6) -> Resul
 
     v4_proxy_server.set(0, proxy_addr, 0)?;
 
-    let mut v6_proxy_server: Array<_, Ipv6Addr> = bpf
+    let mut v6_proxy_server: Array<_, ShareIpv6Addr> = bpf
         .map_mut(PROXY_IPV6_CLIENT)
         .expect("PROXY_IPV6_CLIENT bpf array not found")
         .try_into()?;
 
-    let proxy_addr = Ipv6Addr {
+    if *addr_v6.ip() == Ipv6Addr::from([0, 0, 0, 0, 0, 0, 0, 0]) {
+        // when set 0.0.0.0, we need bpf use ::1 to connect local
+        addr_v6.set_ip(Ipv6Addr::from([0, 0, 0, 0, 0, 0, 0, 1]));
+    }
+
+    let proxy_addr = ShareIpv6Addr {
         addr: addr_v6.ip().network_order_segments(),
         port: addr.port(),
     };
