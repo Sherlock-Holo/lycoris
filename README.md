@@ -46,7 +46,7 @@ it just a simple txt like
 ## features
 
 - [x] TCP4 proxy
-- [] UDP4 proxy
+- [ ] UDP4 proxy
 - [x] whitelist/blacklist ip mode switch
 - [x] TCP6 proxy
-- [] UDP6 proxy
+- [ ] UDP6 proxy
