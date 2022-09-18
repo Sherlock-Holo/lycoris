@@ -1,5 +1,7 @@
 #![no_std]
 
+use core::mem;
+
 pub use cgroup_connect4::handle_cgroup_connect4;
 pub use cgroup_connect6::handle_cgroup_connect6;
 pub use sockops_callback::handle_sockops;
@@ -52,4 +54,9 @@ fn should_proxy(is_blacklist_mode: bool, in_list: bool) -> bool {
     } else {
         !in_list
     }
+}
+
+#[inline]
+fn get_ipv6_octets(addr: [u16; 8]) -> [u8; 16] {
+    unsafe { mem::transmute(addr) }
 }

@@ -20,7 +20,8 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
         return Ok(());
     }
 
-    let user_ip4 = u32::from_be(sock_addr.user_ip4).to_be_bytes();
+    let user_ip4_u32 = u32::from_be(sock_addr.user_ip4);
+    let user_ip4 = user_ip4_u32.to_be_bytes();
     let key = Key::new(32, user_ip4);
 
     let is_blacklist_mode = match PROXY_IPV4_LIST_MODE.get(0) {
@@ -35,10 +36,7 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
 
     let in_list = PROXY_IPV4_LIST.get(&key).copied().unwrap_or(0) > 0;
     if !should_proxy(is_blacklist_mode, in_list) {
-        debug!(
-            &ctx,
-            "{}.{}.{}.{} is direct connect ip", user_ip4[0], user_ip4[1], user_ip4[2], user_ip4[3]
-        );
+        debug!(&ctx, "{:ipv4} is direct connect ip", user_ip4_u32);
 
         return Ok(());
     }
@@ -47,11 +45,7 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
         None => {
             debug!(
                 &ctx,
-                "maybe proxy server is not set yet, let {}.{}.{}.{} connect directly",
-                user_ip4[0],
-                user_ip4[1],
-                user_ip4[2],
-                user_ip4[3]
+                "maybe proxy server is not set yet, let {:ipv4} connect directly", user_ip4_u32
             );
 
             return Ok(());
@@ -63,29 +57,18 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
     if user_ip4 == proxy_client.addr {
         debug!(
             &ctx,
-            "proxy client ip {}.{}.{}.{} need connect directly",
-            user_ip4[0],
-            user_ip4[1],
-            user_ip4[2],
-            user_ip4[3]
+            "proxy client ip {:ipv4} need connect directly", user_ip4_u32
         );
 
         return Ok(());
     }
 
-    debug!(
-        &ctx,
-        "{}.{}.{}.{} need proxy", user_ip4[0], user_ip4[1], user_ip4[2], user_ip4[3]
-    );
+    debug!(&ctx, "{:ipv4} need proxy", user_ip4_u32);
 
     debug!(
         &ctx,
-        "get proxy server done {}.{}.{}.{}:{}",
-        proxy_client.addr[0],
-        proxy_client.addr[1],
-        proxy_client.addr[2],
-        proxy_client.addr[3],
-        proxy_client.port
+        "get proxy server done {:ipv4}",
+        u32::from_be_bytes(proxy_client.addr)
     );
 
     let cookie = unsafe { bpf_get_socket_cookie(ctx.sock_addr as _) };

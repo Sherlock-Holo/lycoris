@@ -7,7 +7,7 @@ use std::str::FromStr;
 use aya::maps::lpm_trie::{Key, LpmTrie};
 use aya::maps::Array;
 use aya::programs::cgroup_sock_addr::CgroupSockAddrLink;
-use aya::programs::{CgroupSockAddr, OwnedLink, SockOps};
+use aya::programs::{CgroupSockAddr, SockOps};
 use aya::Bpf;
 use aya_log::BpfLogger;
 use cidr::{Ipv4Inet, Ipv6Inet};
@@ -38,6 +38,7 @@ use crate::config::Config;
 pub use crate::connect::Connector;
 pub use crate::err::Error;
 pub use crate::listener::Listener;
+pub use crate::owned_link::OwnedLink;
 pub use crate::token::TokenGenerator;
 
 mod addr;
@@ -48,6 +49,7 @@ mod config;
 mod connect;
 mod err;
 mod listener;
+mod owned_link;
 mod token;
 
 pub async fn run() -> Result<(), Error> {
@@ -136,7 +138,7 @@ async fn load_connect4(
 
     info!(?cgroup_path, "attach cgroup done");
 
-    Ok(connect4_prog.take_link(connect4_link_id)?)
+    Ok(connect4_prog.take_link(connect4_link_id)?.into())
 }
 
 async fn load_connect6(
@@ -158,7 +160,7 @@ async fn load_connect6(
 
     info!(?cgroup_path, "attach cgroup done");
 
-    Ok(connect6_prog.take_link(connect6_link_id)?)
+    Ok(connect6_prog.take_link(connect6_link_id)?.into())
 }
 
 // return Box<dyn Any> because the SockOpsLink is un-exported
@@ -181,7 +183,7 @@ async fn load_established_sockops(
 
     info!("attach established_connect done");
 
-    Ok(Box::new(prog.take_link(link_id)?))
+    Ok(Box::new(OwnedLink::from(prog.take_link(link_id)?)))
 }
 
 fn set_proxy_addr(
