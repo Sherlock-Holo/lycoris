@@ -8,7 +8,7 @@ use aya_log_ebpf::debug;
 
 use crate::kernel_binding::require::{AF_INET, AF_INET6};
 use crate::map::*;
-use crate::{ConnectedIpv4Addr, ConnectedIpv6Addr};
+use crate::{get_ipv6_octets, ConnectedIpv4Addr, ConnectedIpv6Addr};
 
 /// when the socket is active established, get origin_dst_ipv4_addr by its cookie, if not exists,
 /// ignore it because this socket doesn't a need proxy socket
@@ -48,11 +48,8 @@ fn handle_ipv4(ctx: SockOpsContext) -> Result<(), c_long> {
 
     debug!(
         &ctx,
-        "get origin dst addr {}.{}.{}.{}:{} done",
-        origin_dst_ipv4_addr.addr[0],
-        origin_dst_ipv4_addr.addr[1],
-        origin_dst_ipv4_addr.addr[2],
-        origin_dst_ipv4_addr.addr[3],
+        "get origin dst addr {:ipv4} done",
+        u32::from_be_bytes(origin_dst_ipv4_addr.addr),
         origin_dst_ipv4_addr.port
     );
 
@@ -63,16 +60,10 @@ fn handle_ipv4(ctx: SockOpsContext) -> Result<(), c_long> {
 
     debug!(
         &ctx,
-        "saddr {}.{}.{}.{}:{} , daddr {}.{}.{}.{}:{}",
-        saddr[0],
-        saddr[1],
-        saddr[2],
-        saddr[3],
+        "saddr {:ipv4}:{} , daddr {:ipv4}:{}",
+        u32::from_be_bytes(saddr),
         sport,
-        daddr[0],
-        daddr[1],
-        daddr[2],
-        daddr[3],
+        u32::from_be_bytes(daddr),
         dport,
     );
 
@@ -107,44 +98,21 @@ fn handle_ipv6(ctx: SockOpsContext) -> Result<(), c_long> {
 
     debug!(
         &ctx,
-        "get origin dst addr [{}:{}:{}:{}:{}:{}:{}:{}]:{} done",
-        u16::from_be(origin_dst_ipv6_addr.addr[0]),
-        u16::from_be(origin_dst_ipv6_addr.addr[1]),
-        u16::from_be(origin_dst_ipv6_addr.addr[2]),
-        u16::from_be(origin_dst_ipv6_addr.addr[3]),
-        u16::from_be(origin_dst_ipv6_addr.addr[4]),
-        u16::from_be(origin_dst_ipv6_addr.addr[5]),
-        u16::from_be(origin_dst_ipv6_addr.addr[6]),
-        u16::from_be(origin_dst_ipv6_addr.addr[7]),
+        "get origin dst addr [{:ipv6}]:{} done",
+        get_ipv6_octets(origin_dst_ipv6_addr.addr),
         origin_dst_ipv6_addr.port
     );
 
     let saddr = copy_local_ip6(&ctx);
+    let saddr_octets = get_ipv6_octets(saddr);
     let sport = ctx.local_port() as u16;
     let daddr = copy_remote_ip6(&ctx);
+    let daddr_octets = get_ipv6_octets(daddr);
     let dport = u32::from_be(ctx.remote_port()) as u16;
 
     debug!(
         &ctx,
-        "saddr [{}:{}:{}:{}:{}:{}:{}]:{} , daddr [{}:{}:{}:{}:{}:{}:{}]:{}",
-        u16::from_be(saddr[0]),
-        u16::from_be(saddr[1]),
-        u16::from_be(saddr[2]),
-        u16::from_be(saddr[3]),
-        u16::from_be(saddr[4]),
-        u16::from_be(saddr[5]),
-        u16::from_be(saddr[6]),
-        u16::from_be(saddr[7]),
-        sport,
-        u16::from_be(daddr[0]),
-        u16::from_be(daddr[1]),
-        u16::from_be(daddr[2]),
-        u16::from_be(daddr[3]),
-        u16::from_be(daddr[4]),
-        u16::from_be(daddr[5]),
-        u16::from_be(daddr[6]),
-        u16::from_be(daddr[7]),
-        dport,
+        "saddr [{:ipv6}]:{} , daddr [{:ipv6}]:{}", saddr_octets, sport, daddr_octets, dport,
     );
 
     let connected_ipv6_addr = ConnectedIpv6Addr {

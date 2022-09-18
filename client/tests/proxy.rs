@@ -9,7 +9,7 @@ use std::{env, io};
 use aya::maps::lpm_trie::{Key, LpmTrie};
 use aya::maps::Array;
 use aya::programs::cgroup_sock_addr::CgroupSockAddrLink;
-use aya::programs::{CgroupSockAddr, OwnedLink, SockOps};
+use aya::programs::{CgroupSockAddr, SockOps};
 use aya::Bpf;
 use aya_log::BpfLogger;
 use bytes::Bytes;
@@ -18,7 +18,7 @@ use futures_util::StreamExt;
 use h2::server;
 use http::{HeaderMap, Response};
 use lycoris_client::bpf_share::{Ipv4Addr, Ipv6Addr};
-use lycoris_client::{Client, Connector, Listener, TokenGenerator};
+use lycoris_client::{Client, Connector, Listener, OwnedLink, TokenGenerator};
 use nix::unistd::getuid;
 use share::helper::Ipv6AddrExt;
 use share::map_name::*;
@@ -42,7 +42,7 @@ const CGROUP_PATH: &str = "/sys/fs/cgroup";
 const BPF_ELF: &str = "../target/bpfel-unknown-none/release/lycoris-bpf";
 const TEST_LISTEN_ADDR: &str = "127.0.0.1:23333";
 const TEST_LISTEN_ADDR_V6: &str = "[::1]:23333";
-const TOKEN_SECRET: &str = "test";
+const TOKEN_SECRET: &str = "testtesttesttest";
 const TOKEN_HEADER: &str = "x-secret";
 const TEST_IP_CIDR: &str = "172.20.0.0/16";
 const TEST_TARGET_ADDR: &str = "172.20.0.1:80";
@@ -101,6 +101,8 @@ async fn main() {
     });
 
     info!("start client");
+
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     let mut tcp_stream = TcpStream::connect(TEST_TARGET_ADDR).await.unwrap();
     let local_addr = tcp_stream.local_addr().unwrap();
@@ -247,7 +249,7 @@ async fn load_connect4(bpf: &mut Bpf, cgroup_path: &Path) -> OwnedLink<CgroupSoc
 
     info!(?cgroup_path, "attach cgroup done");
 
-    connect4_prog.take_link(connect4_link_id).unwrap()
+    connect4_prog.take_link(connect4_link_id).unwrap().into()
 }
 
 // return Box<dyn Any> because the SockOpsLink is un-exported
@@ -268,7 +270,7 @@ async fn load_established_sockops(bpf: &mut Bpf, cgroup_path: &Path) -> Box<dyn 
 
     info!("attach established_connect done");
 
-    Box::new(prog.take_link(link_id).unwrap())
+    Box::new(OwnedLink::from(prog.take_link(link_id).unwrap()))
 }
 
 fn load_target_ip(bpf: &mut Bpf) {
