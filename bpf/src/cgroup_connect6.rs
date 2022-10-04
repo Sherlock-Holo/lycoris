@@ -1,5 +1,5 @@
 use core::ffi::c_long;
-use core::mem;
+use core::{mem, ptr};
 
 use aya_bpf::bindings::bpf_sock_addr;
 use aya_bpf::helpers::*;
@@ -20,6 +20,16 @@ pub fn handle_cgroup_connect6(ctx: SockAddrContext) -> Result<(), c_long> {
         || sock_addr.family != require::AF_INET6
     {
         return Ok(());
+    }
+
+    unsafe {
+        let root_netns_cookie = bpf_get_netns_cookie(ptr::null_mut());
+        let current_netns_cookie = bpf_get_netns_cookie(ctx.sock_addr as _);
+
+        // ignore docker/podman container, they can't access the proxy client
+        if root_netns_cookie != current_netns_cookie {
+            return Ok(());
+        }
     }
 
     let user_ipv6 = get_ipv6_segments(sock_addr);

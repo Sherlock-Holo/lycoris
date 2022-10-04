@@ -1,4 +1,5 @@
 use core::ffi::c_long;
+use core::ptr;
 
 use aya_bpf::helpers::*;
 use aya_bpf::maps::lpm_trie::Key;
@@ -18,6 +19,16 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
         || sock_addr.family != require::AF_INET
     {
         return Ok(());
+    }
+
+    unsafe {
+        let root_netns_cookie = bpf_get_netns_cookie(ptr::null_mut());
+        let current_netns_cookie = bpf_get_netns_cookie(ctx.sock_addr as _);
+
+        // ignore docker/podman container, they can't access the proxy client
+        if root_netns_cookie != current_netns_cookie {
+            return Ok(());
+        }
     }
 
     let user_ip4_u32 = u32::from_be(sock_addr.user_ip4);

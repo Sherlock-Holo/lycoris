@@ -50,3 +50,9 @@ it just a simple txt like
 - [x] whitelist/blacklist ip mode switch
 - [x] TCP6 proxy
 - [ ] UDP6 proxy
+
+# need help
+
+- [ ] container proxy
+
+> container can't access the proxy client in root network namespace
