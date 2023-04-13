@@ -9,9 +9,10 @@ use bytes::Bytes;
 use futures_channel::mpsc::{Receiver as BoundedReceiver, Sender as BoundedSender};
 use futures_channel::oneshot::Sender;
 use futures_channel::{mpsc, oneshot};
+use futures_util::future::{AbortHandle, Abortable};
 use futures_util::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
 use h2::client::{Builder, ResponseFuture, SendRequest};
-use h2::{Reason, RecvStream, SendStream};
+use h2::{Ping, PingPong, Reason, RecvStream, SendStream};
 use http::header::HeaderName;
 use http::Request;
 use share::async_read_recv_stream::AsyncReadRecvStream;
@@ -23,6 +24,7 @@ use tokio::net::TcpStream;
 use tokio::time;
 use tokio_rustls::rustls::{ClientConfig, ServerName};
 use tokio_rustls::{TlsConnector, TlsStream};
+use tokio_stream::wrappers::IntervalStream;
 use tracing::{error, info};
 
 use crate::err::Error;
@@ -297,7 +299,7 @@ async fn connect_remote_addr(
 async fn h2_handshake<IO: TokioAsyncRead + TokioAsyncWrite + Unpin + Send + 'static>(
     stream: IO,
 ) -> Result<SendRequest<Bytes>, Error> {
-    let (mut send_request, h2_conn) = Builder::new()
+    let (mut send_request, mut h2_conn) = Builder::new()
         .initial_window_size(INITIAL_WINDOW_SIZE)
         .initial_connection_window_size(INITIAL_CONNECTION_WINDOW_SIZE)
         .max_frame_size(MAX_FRAME_SIZE)
@@ -306,8 +308,22 @@ async fn h2_handshake<IO: TokioAsyncRead + TokioAsyncWrite + Unpin + Send + 'sta
         .tap_err(|err| error!(%err, "h2 handshake failed"))?;
 
     tokio::spawn(async move {
-        if let Err(err) = h2_conn.await {
-            error!(%err, "h2 connection meet error");
+        let (abort_handle, abort_reg) = AbortHandle::new_pair();
+        let ping_pong = h2_conn.ping_pong().expect("ping_pong return None");
+        let h2_conn = Abortable::new(h2_conn, abort_reg);
+
+        tokio::spawn(async move { h2_connection_ping_pong(ping_pong, abort_handle).await });
+
+        match h2_conn.await {
+            Err(_err) => {
+                error!("h2 connection ping pong failed");
+            }
+
+            Ok(Err(err)) => {
+                error!(%err, "h2 connection meet error");
+            }
+
+            _ => {}
         }
     });
 
@@ -319,4 +335,20 @@ async fn h2_handshake<IO: TokioAsyncRead + TokioAsyncWrite + Unpin + Send + 'sta
         .tap_err(|err| error!(%err, "wait h2 send request ready failed"))?;
 
     Ok(send_request)
+}
+
+async fn h2_connection_ping_pong(mut ping_pong: PingPong, abort_handle: AbortHandle) {
+    const PING_INTERVAL: Duration = Duration::from_secs(10);
+
+    let mut interval_stream = IntervalStream::new(time::interval(PING_INTERVAL));
+
+    while interval_stream.next().await.is_some() {
+        if let Err(err) = ping_pong.ping(Ping::opaque()).await {
+            error!(%err, "h2 connection ping failed");
+
+            abort_handle.abort();
+
+            return;
+        }
+    }
 }
