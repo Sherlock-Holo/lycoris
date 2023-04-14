@@ -1234,6 +1234,7 @@ dependencies = [
  "http",
  "tap",
  "tokio",
+ "tokio-stream",
  "tracing",
 ]
 

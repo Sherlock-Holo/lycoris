@@ -10,19 +10,20 @@ use futures_channel::oneshot::{self, Sender};
 use futures_util::future::{AbortHandle, Abortable};
 use futures_util::{SinkExt, StreamExt};
 use h2::client::{Builder, ResponseFuture, SendRequest};
-use h2::{Ping, PingPong, Reason, RecvStream, SendStream};
+use h2::{Reason, RecvStream, SendStream};
 use http::header::HeaderName;
 use http::Request;
 use share::async_read_recv_stream::AsyncReadRecvStream;
 use share::async_write_send_stream::AsyncWriteSendStream;
 use share::h2_config::*;
+use share::h2_ping;
+use share::h2_ping::AbortType;
 use tap::TapFallible;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 use tokio::time;
 use tokio_rustls::rustls::{ClientConfig, ServerName};
 use tokio_rustls::{TlsConnector, TlsStream};
-use tokio_stream::wrappers::IntervalStream;
 use tracing::{error, info};
 
 use crate::err::Error;
@@ -316,7 +317,9 @@ async fn h2_handshake<IO: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
         let ping_pong = h2_conn.ping_pong().expect("ping_pong return None");
         let h2_conn = Abortable::new(h2_conn, abort_reg);
 
-        tokio::spawn(async move { h2_connection_ping_pong(ping_pong, abort_handle).await });
+        tokio::spawn(async move {
+            h2_ping::h2_connection_ping_pong(ping_pong, AbortType::Handle(abort_handle)).await
+        });
 
         match h2_conn.await {
             Err(_err) => {
@@ -339,33 +342,4 @@ async fn h2_handshake<IO: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
         .tap_err(|err| error!(%err, "wait h2 send request ready failed"))?;
 
     Ok(send_request)
-}
-
-async fn h2_connection_ping_pong(mut ping_pong: PingPong, abort_handle: AbortHandle) {
-    const PING_INTERVAL: Duration = Duration::from_secs(10);
-    const TIMEOUT: Duration = Duration::from_secs(10);
-
-    let mut interval_stream = IntervalStream::new(time::interval(PING_INTERVAL));
-
-    while interval_stream.next().await.is_some() {
-        match time::timeout(TIMEOUT, ping_pong.ping(Ping::opaque())).await {
-            Err(_) => {
-                error!("h2 connection ping timeout");
-
-                abort_handle.abort();
-
-                return;
-            }
-
-            Ok(Err(err)) => {
-                error!(%err, "h2 connection ping failed");
-
-                abort_handle.abort();
-
-                return;
-            }
-
-            Ok(Ok(_)) => {}
-        }
-    }
 }
