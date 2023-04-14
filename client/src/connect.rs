@@ -155,7 +155,7 @@ impl Connector {
         mut connect_request_receiver: BoundedReceiver<ConnectRequest>,
     ) {
         loop {
-            let mut send_request = if let Ok(send_request) = self.get_new_h2_send_request().await {
+            let send_request = if let Ok(send_request) = self.get_new_h2_send_request().await {
                 send_request
             } else {
                 // control the connect speed when get h2 send request failed
@@ -166,51 +166,57 @@ impl Connector {
 
             info!("get new h2 send request done");
 
-            'CONNECT_LOOP: while let Some(mut connect_request) =
-                connect_request_receiver.next().await
-            {
-                let token = self.inner.token_generator.generate_token();
-                let mut request = Request::new(());
-                request.headers_mut().insert(
-                    self.inner
-                        .token_header
-                        .parse::<HeaderName>()
-                        .unwrap_or_else(|_| {
-                            panic!("token header {} is invalid", self.inner.token_header)
-                        }),
-                    token
-                        .parse()
-                        .unwrap_or_else(|_| panic!("token {} is invalid header value", token)),
-                );
+            self.accept_connection(&mut connect_request_receiver, send_request)
+                .await;
+        }
+    }
 
-                match send_request.send_request(request, false) {
-                    Err(err) => {
-                        error!(%err, "send h2 request failed");
+    async fn accept_connection(
+        &self,
+        connect_request_receiver: &mut BoundedReceiver<ConnectRequest>,
+        mut send_request: SendRequest<Bytes>,
+    ) {
+        while let Some(mut connect_request) = connect_request_receiver.next().await {
+            let token = self.inner.token_generator.generate_token();
+            let mut request = Request::new(());
+            request.headers_mut().insert(
+                self.inner
+                    .token_header
+                    .parse::<HeaderName>()
+                    .unwrap_or_else(|_| {
+                        panic!("token header {} is invalid", self.inner.token_header)
+                    }),
+                token
+                    .parse()
+                    .unwrap_or_else(|_| panic!("token {} is invalid header value", token)),
+            );
+
+            match send_request.send_request(request, false) {
+                Err(err) => {
+                    error!(%err, "send h2 request failed");
+
+                    let _ = connect_request
+                        .read_write_sender
+                        .take()
+                        .unwrap()
+                        .send(Err(err));
+
+                    return;
+                }
+
+                Ok((response, send_stream)) => {
+                    info!("get send_stream and response done");
+
+                    tokio::spawn(async move {
+                        let result =
+                            connect_remote_addr(send_stream, response, connect_request.addr).await;
 
                         let _ = connect_request
                             .read_write_sender
                             .take()
                             .unwrap()
-                            .send(Err(err));
-
-                        break 'CONNECT_LOOP;
-                    }
-
-                    Ok((response, send_stream)) => {
-                        info!("get send_stream and response done");
-
-                        tokio::spawn(async move {
-                            let result =
-                                connect_remote_addr(send_stream, response, connect_request.addr)
-                                    .await;
-
-                            let _ = connect_request
-                                .read_write_sender
-                                .take()
-                                .unwrap()
-                                .send(result);
-                        });
-                    }
+                            .send(result);
+                    });
                 }
             }
         }
@@ -339,16 +345,29 @@ async fn h2_handshake<IO: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
 
 async fn h2_connection_ping_pong(mut ping_pong: PingPong, abort_handle: AbortHandle) {
     const PING_INTERVAL: Duration = Duration::from_secs(10);
+    const TIMEOUT: Duration = Duration::from_secs(10);
 
     let mut interval_stream = IntervalStream::new(time::interval(PING_INTERVAL));
 
     while interval_stream.next().await.is_some() {
-        if let Err(err) = ping_pong.ping(Ping::opaque()).await {
-            error!(%err, "h2 connection ping failed");
+        match time::timeout(TIMEOUT, ping_pong.ping(Ping::opaque())).await {
+            Err(_) => {
+                error!("h2 connection ping timeout");
 
-            abort_handle.abort();
+                abort_handle.abort();
 
-            return;
+                return;
+            }
+
+            Ok(Err(err)) => {
+                error!(%err, "h2 connection ping failed");
+
+                abort_handle.abort();
+
+                return;
+            }
+
+            Ok(Ok(_)) => {}
         }
     }
 }
