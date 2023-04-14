@@ -726,7 +726,6 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tokio-stream",
- "tokio-util",
  "totp-rs",
  "tracing",
  "tracing-log",
@@ -752,7 +751,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-rustls",
- "tokio-util",
  "totp-rs",
  "tracing",
  "tracing-subscriber",
@@ -1223,7 +1221,6 @@ dependencies = [
  "http",
  "tap",
  "tokio",
- "tokio-util",
  "tracing",
 ]
 
@@ -1422,7 +1419,6 @@ checksum = "5427d89453009325de0d8f342c9490009f76e999cb7672d77e46267448f7e6b2"
 dependencies = [
  "bytes",
  "futures-core",
- "futures-io",
  "futures-sink",
  "pin-project-lite",
  "tokio",

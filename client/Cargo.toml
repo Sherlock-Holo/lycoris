@@ -13,8 +13,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-uti
 tap = "1"
 
 # async
-tokio-util = { version = "0.7", features = ["compat"] }
-tokio-stream = { version = "0.1", features = ["time"] }
+tokio-stream = { version = "0.1", features = ["time", "io-util"] }
 futures-util = { version = "0.3", features = ["io"] }
 futures-channel = { version = "0.3", features = ["sink"] }
 async-trait = "0.1"

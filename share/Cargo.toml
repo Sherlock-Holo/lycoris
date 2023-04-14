@@ -10,7 +10,6 @@ h2 = { version = "0.3", features = ["stream"] }
 futures-util = { version = "0.3", features = ["io"] }
 bytes = "1"
 tokio = { version = "1", features = ["macros", "rt", "io-util", "net"] }
-tokio-util = { version = "0.7", features = ["compat"] }
 http = "0.2"
 tap = "1"
 tracing = "0.1"

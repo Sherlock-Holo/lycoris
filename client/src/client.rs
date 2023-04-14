@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use share::proxy;
-use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 use tracing::info;
 
 use crate::connect::Connect;
@@ -42,7 +41,7 @@ impl<C: Connect + Send + Sync + 'static> Client<C> {
 
                 let (tcp_read, tcp_write) = tcp_stream.into_split();
 
-                proxy::proxy(read, write, tcp_read.compat(), tcp_write.compat_write()).await?;
+                proxy::proxy(read, write, tcp_read, tcp_write).await?;
 
                 Ok::<_, Error>(())
             });

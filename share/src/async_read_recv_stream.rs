@@ -4,9 +4,10 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use bytes::{Buf, BufMut, BytesMut};
-use futures_util::{ready, AsyncRead, Stream, StreamExt};
+use futures_util::{ready, Stream, StreamExt};
 use h2::RecvStream;
 use tap::TapFallible;
+use tokio::io::{AsyncRead, ReadBuf};
 use tracing::error;
 
 use crate::helper::h2_err_to_io_err;
@@ -46,18 +47,19 @@ where
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<io::Result<usize>> {
-        if buf.is_empty() {
-            return Poll::Ready(Ok(0));
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        if buf.remaining() == 0 {
+            return Poll::Ready(Ok(()));
         }
 
         if !self.buf.is_empty() {
-            let copy_size = buf.len().min(self.buf.len());
+            let copy_size = buf.remaining().min(self.buf.len());
 
-            self.buf.copy_to_slice(&mut buf[..copy_size]);
+            buf.put_slice(&self.buf[..copy_size]);
+            self.buf.advance(copy_size);
 
-            return Poll::Ready(Ok(copy_size));
+            return Poll::Ready(Ok(()));
         }
 
         if let Some(result) = ready!(self.stream.poll_next_unpin(cx)) {
@@ -74,7 +76,7 @@ where
 
             self.poll_read(cx, buf)
         } else {
-            Poll::Ready(Ok(0))
+            Poll::Ready(Ok(()))
         }
     }
 }
@@ -82,7 +84,8 @@ where
 #[cfg(test)]
 mod tests {
     use bytes::Bytes;
-    use futures_util::{stream, AsyncReadExt};
+    use futures_util::stream;
+    use tokio::io::AsyncReadExt;
 
     use super::*;
 

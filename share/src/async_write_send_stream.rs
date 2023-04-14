@@ -4,9 +4,10 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use bytes::{Buf, Bytes};
-use futures_util::{ready, AsyncWrite};
+use futures_util::ready;
 use h2::{Reason, SendStream};
 use http::HeaderMap;
+use tokio::io::AsyncWrite;
 use tracing::error;
 
 use crate::helper::h2_err_to_io_err;
@@ -180,7 +181,7 @@ impl<S: LimitedSendStream<Bytes> + Unpin> AsyncWrite for AsyncWriteSendStream<S>
         Poll::Ready(Ok(()))
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_shutdown(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         self.trailer_is_sent = true;
 
         self.send_stream
@@ -209,8 +210,8 @@ impl<S: LimitedSendStream<Bytes> + Unpin> Drop for AsyncWriteSendStream<S> {
 #[cfg(test)]
 mod tests {
     use bytes::{BufMut, BytesMut};
-    use futures_util::AsyncWriteExt;
     use h2::Error;
+    use tokio::io::AsyncWriteExt;
 
     use super::*;
 
@@ -296,7 +297,7 @@ mod tests {
             b"123"
         );
 
-        async_write_send_stream.close().await.unwrap();
+        async_write_send_stream.shutdown().await.unwrap();
 
         assert_eq!(
             async_write_send_stream

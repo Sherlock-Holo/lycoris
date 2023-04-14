@@ -13,7 +13,6 @@ use share::proxy;
 use tap::TapFallible;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::TlsAcceptor;
-use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 use tracing::{error, info};
 
 use crate::auth::Auth;
@@ -185,8 +184,8 @@ async fn handle_h2_stream(
     let (remote_in_tcp, remote_out_tcp) = remote_tcp_stream.into_split();
 
     proxy::proxy(
-        remote_in_tcp.compat(),
-        remote_out_tcp.compat_write(),
+        remote_in_tcp,
+        remote_out_tcp,
         AsyncReadRecvStream::new(in_stream),
         AsyncWriteSendStream::new(h2_send_stream),
     )

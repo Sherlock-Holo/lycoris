@@ -10,7 +10,6 @@ license = "MIT"
 thiserror = "1"
 bytes = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "fs"] }
-tokio-util = { version = "0.7", features = ["compat"] }
 futures-util = { version = "0.3", features = ["io"] }
 tap = "1"
 

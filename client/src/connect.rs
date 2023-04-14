@@ -10,7 +10,7 @@ use futures_channel::mpsc::{Receiver as BoundedReceiver, Sender as BoundedSender
 use futures_channel::oneshot::Sender;
 use futures_channel::{mpsc, oneshot};
 use futures_util::future::{AbortHandle, Abortable};
-use futures_util::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
+use futures_util::{SinkExt, StreamExt};
 use h2::client::{Builder, ResponseFuture, SendRequest};
 use h2::{Ping, PingPong, Reason, RecvStream, SendStream};
 use http::header::HeaderName;
@@ -19,7 +19,7 @@ use share::async_read_recv_stream::AsyncReadRecvStream;
 use share::async_write_send_stream::AsyncWriteSendStream;
 use share::h2_config::*;
 use tap::TapFallible;
-use tokio::io::{AsyncRead as TokioAsyncRead, AsyncWrite as TokioAsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 use tokio::time;
 use tokio_rustls::rustls::{ClientConfig, ServerName};
@@ -296,7 +296,7 @@ async fn connect_remote_addr(
     ))
 }
 
-async fn h2_handshake<IO: TokioAsyncRead + TokioAsyncWrite + Unpin + Send + 'static>(
+async fn h2_handshake<IO: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
     stream: IO,
 ) -> Result<SendRequest<Bytes>, Error> {
     let (mut send_request, mut h2_conn) = Builder::new()

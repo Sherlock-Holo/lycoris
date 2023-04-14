@@ -12,15 +12,15 @@ use aya::Bpf;
 use aya_log::BpfLogger;
 use cidr::{Ipv4Inet, Ipv6Inet};
 use clap::Parser;
-use futures_util::io::BufReader;
-use futures_util::{future, AsyncBufReadExt, StreamExt};
+use futures_util::{future, StreamExt};
 use share::helper::Ipv6AddrExt;
 use share::map_name::*;
 use tokio::fs;
 use tokio::fs::File;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
 use tokio_rustls::webpki::TrustAnchor;
-use tokio_util::compat::TokioAsyncReadCompatExt;
+use tokio_stream::wrappers::LinesStream;
 use tracing::level_filters::LevelFilter;
 use tracing::{info, subscriber, warn};
 use tracing_log::LogTracer;
@@ -320,7 +320,7 @@ async fn set_proxy_ip_list<'a, I: Iterator<Item = &'a Path>>(
 
     for ip_list_path in ip_list_paths {
         let ip_list = File::open(ip_list_path).await?;
-        let mut reader = BufReader::new(ip_list.compat()).lines();
+        let mut reader = LinesStream::new(BufReader::new(ip_list).lines());
 
         while let Some(result) = reader.next().await {
             let line = result?;
