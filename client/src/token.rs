@@ -3,7 +3,7 @@ use totp_rs::{Algorithm, TOTP};
 use crate::err::Error;
 
 pub struct TokenGenerator {
-    totp: TOTP<String>,
+    totp: TOTP,
 }
 
 impl TokenGenerator {
@@ -17,7 +17,7 @@ impl TokenGenerator {
                 8,
                 1,
                 30,
-                token_secret,
+                token_secret.into_bytes(),
                 None,
                 account_name
                     .into()
@@ -49,7 +49,7 @@ mod tests {
             8,
             1,
             30,
-            TOKEN_SECRET.to_string(),
+            TOKEN_SECRET.as_bytes().to_vec(),
             None,
             ACCOUNT_NAME.unwrap_or_else(|| "default_account".to_string()),
         )

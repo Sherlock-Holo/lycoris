@@ -19,7 +19,6 @@ use tokio::fs;
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
-use tokio_rustls::webpki::TrustAnchor;
 use tokio_stream::wrappers::LinesStream;
 use tracing::level_filters::LevelFilter;
 use tracing::{info, subscriber, warn};
@@ -29,6 +28,7 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{fmt, Registry};
 use trust_dns_resolver::error::ResolveErrorKind;
 use trust_dns_resolver::AsyncResolver;
+use webpki::TrustAnchor;
 use webpki_roots::TLS_SERVER_ROOTS;
 
 use crate::args::Args;

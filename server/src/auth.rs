@@ -2,7 +2,7 @@ use totp_rs::{Algorithm, TOTP};
 
 #[derive(Debug)]
 pub struct Auth {
-    totp: TOTP<String>,
+    totp: TOTP,
 }
 
 impl Auth {
@@ -16,7 +16,7 @@ impl Auth {
                 8,
                 1,
                 30,
-                secret,
+                secret.into_bytes(),
                 None,
                 account_name
                     .into()
@@ -46,7 +46,7 @@ mod tests {
             8,
             1,
             30,
-            secret.clone(),
+            secret.clone().into_bytes(),
             None,
             account_name.clone(),
         )
@@ -70,7 +70,7 @@ mod tests {
             8,
             1,
             30,
-            secret.clone(),
+            secret.clone().into_bytes(),
             None,
             "test".to_string(),
         )

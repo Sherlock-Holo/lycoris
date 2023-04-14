@@ -29,7 +29,6 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::rustls::{
     Certificate, ClientConfig, OwnedTrustAnchor, PrivateKey, RootCertStore, ServerConfig,
 };
-use tokio_rustls::webpki::TrustAnchor;
 use tokio_rustls::TlsAcceptor;
 use tracing::level_filters::LevelFilter;
 use tracing::{info, subscriber};
@@ -37,6 +36,7 @@ use tracing_log::LogTracer;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{fmt, Registry};
+use webpki::TrustAnchor;
 
 const CGROUP_PATH: &str = "/sys/fs/cgroup";
 const BPF_ELF: &str = "../target/bpfel-unknown-none/release/lycoris-bpf";

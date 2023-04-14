@@ -30,16 +30,17 @@ aya-log = { git = "https://github.com/aya-rs/aya", tag = "aya-log-v0.1.11" }
 tracing-log = "0.1"
 
 # auth
-totp-rs = { version = "3", features = ["otpauth"] }
+totp-rs = { version = "5", features = ["otpauth"] }
 
 # http/2
 h2 = { version = "0.3", features = ["stream"] }
 http = "0.2"
 
 # tls
-tokio-rustls = "0.23"
+tokio-rustls = "0.24"
 rustls-pemfile = "1"
-webpki-roots = "0.22"
+webpki-roots = "0.23"
+webpki = { version = "0.22", features = ["std"] }
 
 # config and args
 serde = { version = "1", features = ["derive"] }
@@ -53,4 +54,4 @@ trust-dns-resolver = "0.22"
 share = { path = "../share" }
 
 [dev-dependencies]
-nix = "0.24"
+nix = "0.26"
