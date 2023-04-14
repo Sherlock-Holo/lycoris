@@ -1,14 +1,12 @@
 use std::future::poll_fn;
-use std::io;
-use std::io::ErrorKind;
+use std::io::{self, ErrorKind};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use bytes::Bytes;
-use futures_channel::mpsc::{Receiver as BoundedReceiver, Sender as BoundedSender};
-use futures_channel::oneshot::Sender;
-use futures_channel::{mpsc, oneshot};
+use futures_channel::mpsc::{self, Receiver as BoundedReceiver, Sender as BoundedSender};
+use futures_channel::oneshot::{self, Sender};
 use futures_util::future::{AbortHandle, Abortable};
 use futures_util::{SinkExt, StreamExt};
 use h2::client::{Builder, ResponseFuture, SendRequest};

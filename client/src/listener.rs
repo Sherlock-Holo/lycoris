@@ -1,5 +1,4 @@
-use std::io;
-use std::io::ErrorKind;
+use std::io::{self, ErrorKind};
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 
 use aya::maps::{HashMap, MapRefMut};

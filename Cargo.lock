@@ -19,7 +19,7 @@ checksum = "b9ccdd8f2a161be9bd5c023df56f1b2a0bd1d83872ae53b71a84a12c9bf6e842"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.14",
+ "syn 2.0.15",
 ]
 
 [[package]]
@@ -59,7 +59,7 @@ dependencies = [
 [[package]]
 name = "aya-bpf"
 version = "0.1.0"
-source = "git+https://github.com/aya-rs/aya?branch=main#23ce42da6843b04fae4de40f4471565491b51109"
+source = "git+https://github.com/aya-rs/aya?branch=main#542ada3fe7f9d4d06542253361acc5fadce3f24b"
 dependencies = [
  "aya-bpf-bindings",
  "aya-bpf-cty",
@@ -70,7 +70,7 @@ dependencies = [
 [[package]]
 name = "aya-bpf-bindings"
 version = "0.1.0"
-source = "git+https://github.com/aya-rs/aya?branch=main#23ce42da6843b04fae4de40f4471565491b51109"
+source = "git+https://github.com/aya-rs/aya?branch=main#542ada3fe7f9d4d06542253361acc5fadce3f24b"
 dependencies = [
  "aya-bpf-cty",
 ]
@@ -78,12 +78,12 @@ dependencies = [
 [[package]]
 name = "aya-bpf-cty"
 version = "0.2.1"
-source = "git+https://github.com/aya-rs/aya?branch=main#23ce42da6843b04fae4de40f4471565491b51109"
+source = "git+https://github.com/aya-rs/aya?branch=main#542ada3fe7f9d4d06542253361acc5fadce3f24b"
 
 [[package]]
 name = "aya-bpf-macros"
 version = "0.1.0"
-source = "git+https://github.com/aya-rs/aya?branch=main#23ce42da6843b04fae4de40f4471565491b51109"
+source = "git+https://github.com/aya-rs/aya?branch=main#542ada3fe7f9d4d06542253361acc5fadce3f24b"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -115,7 +115,7 @@ dependencies = [
 [[package]]
 name = "aya-log-common"
 version = "0.1.13"
-source = "git+https://github.com/aya-rs/aya?branch=main#23ce42da6843b04fae4de40f4471565491b51109"
+source = "git+https://github.com/aya-rs/aya?branch=main#542ada3fe7f9d4d06542253361acc5fadce3f24b"
 dependencies = [
  "num_enum 0.6.0",
 ]
@@ -123,7 +123,7 @@ dependencies = [
 [[package]]
 name = "aya-log-ebpf"
 version = "0.1.0"
-source = "git+https://github.com/aya-rs/aya?branch=main#23ce42da6843b04fae4de40f4471565491b51109"
+source = "git+https://github.com/aya-rs/aya?branch=main#542ada3fe7f9d4d06542253361acc5fadce3f24b"
 dependencies = [
  "aya-bpf",
  "aya-log-common 0.1.13",
@@ -133,7 +133,7 @@ dependencies = [
 [[package]]
 name = "aya-log-ebpf-macros"
 version = "0.1.0"
-source = "git+https://github.com/aya-rs/aya?branch=main#23ce42da6843b04fae4de40f4471565491b51109"
+source = "git+https://github.com/aya-rs/aya?branch=main#542ada3fe7f9d4d06542253361acc5fadce3f24b"
 dependencies = [
  "aya-log-common 0.1.13",
  "aya-log-parser",
@@ -145,7 +145,7 @@ dependencies = [
 [[package]]
 name = "aya-log-parser"
 version = "0.1.11-dev.0"
-source = "git+https://github.com/aya-rs/aya?branch=main#23ce42da6843b04fae4de40f4471565491b51109"
+source = "git+https://github.com/aya-rs/aya?branch=main#542ada3fe7f9d4d06542253361acc5fadce3f24b"
 dependencies = [
  "aya-log-common 0.1.13",
 ]
@@ -421,7 +421,7 @@ checksum = "89ca545a94061b6365f2c7355b4b32bd20df3ff95f02da9329b34ccc3bd6ee72"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.14",
+ "syn 2.0.15",
 ]
 
 [[package]]
@@ -483,9 +483,9 @@ checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
 
 [[package]]
 name = "h2"
-version = "0.3.16"
+version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5be7b54589b581f624f566bf5d8eb2bab1db736c51528720b6bd36b96b55924d"
+checksum = "66b91535aa35fea1523ad1b86cb6b53c28e0ae566ba4a460f4457e936cad7c6f"
 dependencies = [
  "bytes",
  "fnv",
@@ -883,7 +883,7 @@ checksum = "3e51dcc6bafb7f3ac88b65d2ad21f4b53d878e496712060e23011862ebd2d2d1"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.14",
+ "syn 2.0.15",
 ]
 
 [[package]]
@@ -1177,7 +1177,7 @@ checksum = "291a097c63d8497e00160b166a967a4a79c64f3facdd01cbd7502231688d77df"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.14",
+ "syn 2.0.15",
 ]
 
 [[package]]
@@ -1305,9 +1305,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.14"
+version = "2.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fcf316d5356ed6847742d036f8a39c3b8435cac10bd528a4bd461928a6ab34d5"
+checksum = "a34fcf3e8b60f57e6a14301a2e916d323af98b0ea63c599441eec8558660c822"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1352,7 +1352,7 @@ checksum = "f9456a42c5b0d803c8cd86e73dd7cc9edd429499f37a3550d286d5e86720569f"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.14",
+ "syn 2.0.15",
 ]
 
 [[package]]
@@ -1405,7 +1405,7 @@ checksum = "61a573bdc87985e9d6ddeed1b3d864e8a302c847e40d647746df2f1de209d1ce"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.14",
+ "syn 2.0.15",
 ]
 
 [[package]]
