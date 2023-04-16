@@ -116,7 +116,7 @@ fn auth(
     Ok(auth.auth(token))
 }
 
-async fn get_remote_addr(in_stream: &mut RecvStream) -> Result<SocketAddr, Error> {
+async fn get_remote_addrs(in_stream: &mut RecvStream) -> Result<Vec<SocketAddr>, Error> {
     let data = match in_stream.next().await {
         None => {
             error!("receive address failed");
@@ -129,7 +129,7 @@ async fn get_remote_addr(in_stream: &mut RecvStream) -> Result<SocketAddr, Error
 
     info!("receive address data done");
 
-    addr::parse_addr(&data)
+    addr::parse_addr(&data).await
 }
 
 async fn handle_h2_stream(
@@ -149,17 +149,17 @@ async fn handle_h2_stream(
 
     let mut in_stream = h2_request.into_body();
 
-    let remote_addr = get_remote_addr(&mut in_stream).await?;
+    let remote_addrs = get_remote_addrs(&mut in_stream).await?;
 
-    info!(%remote_addr, "get remote addr done");
+    info!(?remote_addrs, "get remote addrs done");
 
     let mut h2_send_stream = h2_respond
         .send_response(Response::new(()), false)
         .tap_err(|err| error!(%err, "send dummy response failed"))?;
 
-    let remote_tcp_stream = match TcpStream::connect(remote_addr).await {
+    let remote_tcp_stream = match TcpStream::connect(remote_addrs.as_slice()).await {
         Err(err) => {
-            error!(%err, %remote_addr, "connect to target failed");
+            error!(%err, ?remote_addrs, "connect to target failed");
 
             let reason = match err.kind() {
                 ErrorKind::ConnectionRefused | ErrorKind::ConnectionAborted => {
@@ -179,7 +179,7 @@ async fn handle_h2_stream(
         Ok(remote_tcp_stream) => remote_tcp_stream,
     };
 
-    info!(%remote_addr, "connect to remote done");
+    info!(?remote_addrs, "connect to remote done");
 
     let (remote_in_tcp, remote_out_tcp) = remote_tcp_stream.into_split();
 

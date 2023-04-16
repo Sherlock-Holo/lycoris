@@ -24,8 +24,9 @@ use tokio::net::TcpStream;
 use tokio::time;
 use tokio_rustls::rustls::{ClientConfig, ServerName};
 use tokio_rustls::{TlsConnector, TlsStream};
-use tracing::{error, info};
+use tracing::{error, info, instrument};
 
+use crate::addr::domain_or_socket_addr::DomainOrSocketAddr;
 use crate::err::Error;
 use crate::token::TokenGenerator;
 use crate::{addr, get_remote_domain_ips};
@@ -35,7 +36,7 @@ pub trait Connect {
     type Read: AsyncRead + Unpin + Send + 'static;
     type Write: AsyncWrite + Unpin + Send + 'static;
 
-    async fn connect(&self, addr: SocketAddr) -> Result<(Self::Read, Self::Write), Error>;
+    async fn connect(&self, addr: DomainOrSocketAddr) -> Result<(Self::Read, Self::Write), Error>;
 }
 
 type ReadWriteStreamTuple = (
@@ -45,7 +46,7 @@ type ReadWriteStreamTuple = (
 
 struct ConnectRequest {
     read_write_sender: Option<Sender<Result<ReadWriteStreamTuple, h2::Error>>>,
-    addr: SocketAddr,
+    addr: DomainOrSocketAddr,
 }
 
 #[derive(Clone)]
@@ -227,7 +228,7 @@ impl Connect for Connector {
     type Read = AsyncReadRecvStream<RecvStream>;
     type Write = AsyncWriteSendStream<SendStream<Bytes>>;
 
-    async fn connect(&self, addr: SocketAddr) -> Result<(Self::Read, Self::Write), Error> {
+    async fn connect(&self, addr: DomainOrSocketAddr) -> Result<(Self::Read, Self::Write), Error> {
         let (sender, receiver) = oneshot::channel();
         let connect_request = ConnectRequest {
             read_write_sender: Some(sender),
@@ -255,10 +256,11 @@ impl Connect for Connector {
     }
 }
 
+#[instrument(err)]
 async fn connect_remote_addr(
     mut send_stream: SendStream<Bytes>,
     response: ResponseFuture,
-    remote_addr: SocketAddr,
+    remote_addr: DomainOrSocketAddr,
 ) -> Result<ReadWriteStreamTuple, h2::Error> {
     let remote_addr_data = addr::encode_addr(remote_addr);
 
@@ -284,9 +286,9 @@ async fn connect_remote_addr(
 
     send_stream
         .send_data(remote_addr_data, false)
-        .tap_err(|err| error!(%err, %remote_addr, "send remote addr failed"))?;
+        .tap_err(|err| error!(%err, "send remote addr failed"))?;
 
-    info!(%remote_addr, "send remote addr done");
+    info!("send remote addr done");
 
     let recv_stream = response
         .await

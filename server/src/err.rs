@@ -16,6 +16,9 @@ pub enum Error {
     #[error("address type {0} is invalid, valid is `4` and `6`")]
     AddrTypeInvalid(u8),
 
+    #[error("address domain invalid")]
+    AddrDomainInvalid,
+
     #[error("auth failed")]
     AuthFailed,
 
