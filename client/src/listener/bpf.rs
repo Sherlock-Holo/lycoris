@@ -1,6 +1,7 @@
 use std::io::{self, ErrorKind};
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 
+use async_trait::async_trait;
 use aya::maps::{HashMap, MapRefMut};
 use futures_util::stream::Select;
 use futures_util::{stream, StreamExt};
@@ -10,6 +11,8 @@ use tap::TapFallible;
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{error, info, warn};
 
+use super::Listener;
+use crate::addr::domain_or_socket_addr::DomainOrSocketAddr;
 use crate::addr::DstAddrLookup;
 use crate::bpf_share::{
     ConnectedIpv4Addr, ConnectedIpv6Addr, Ipv4Addr as ShareIpv4Addr, Ipv6Addr as ShareIpv6Addr,
@@ -18,7 +21,7 @@ use crate::err::Error;
 
 const MAX_RETRY: usize = 3;
 
-pub struct Listener {
+pub struct BpfListener {
     v4_dst_addr_map: DstAddrLookup<HashMap<MapRefMut, ConnectedIpv4Addr, ShareIpv4Addr>>,
     v6_dst_addr_map: DstAddrLookup<HashMap<MapRefMut, ConnectedIpv6Addr, ShareIpv6Addr>>,
     listen_addr: SocketAddrV4,
@@ -26,7 +29,7 @@ pub struct Listener {
     tcp_listener: Select<TcpListenerAddrStream, TcpListenerAddrStream>,
 }
 
-impl Listener {
+impl BpfListener {
     pub async fn new(
         listen_addr: SocketAddrV4,
         listen_addr_v6: SocketAddrV6,
@@ -61,43 +64,6 @@ impl Listener {
             listen_addr_v6,
             tcp_listener,
         })
-    }
-
-    pub async fn accept(&mut self) -> Result<(TcpStream, SocketAddr), Error> {
-        while let Some(result) = self.tcp_listener.next().await {
-            let (tcp_stream, peer_addr) = match result {
-                Err(err) => {
-                    warn!(%err, "accept tcp failed");
-
-                    continue;
-                }
-
-                Ok(result) => result,
-            };
-
-            info!("accept tcp done");
-
-            match peer_addr {
-                SocketAddr::V6(peer_addr) => {
-                    if let Some(result) = self.handle_v6(peer_addr, tcp_stream).await? {
-                        return Ok(result);
-                    }
-                }
-
-                SocketAddr::V4(peer_addr) => {
-                    if let Some(result) = self.handle_v4(peer_addr, tcp_stream).await? {
-                        return Ok(result);
-                    }
-                }
-            }
-        }
-
-        error!("listener stop unexpectedly");
-
-        Err(Error::Io(io::Error::new(
-            ErrorKind::Other,
-            "listener stop unexpectedly",
-        )))
     }
 
     async fn handle_v4(
@@ -174,5 +140,51 @@ impl Listener {
                 Ok(Some((tcp_stream, origin_dst_addr)))
             }
         }
+    }
+}
+
+#[async_trait]
+impl Listener for BpfListener {
+    type Stream = TcpStream;
+
+    async fn accept(&mut self) -> Result<(Self::Stream, DomainOrSocketAddr), Error> {
+        while let Some(result) = self.tcp_listener.next().await {
+            let (tcp_stream, peer_addr) = match result {
+                Err(err) => {
+                    warn!(%err, "accept tcp failed");
+
+                    continue;
+                }
+
+                Ok(result) => result,
+            };
+
+            info!("accept tcp done");
+
+            match peer_addr {
+                SocketAddr::V6(peer_addr) => {
+                    if let Some(result) = self.handle_v6(peer_addr, tcp_stream).await? {
+                        let (tcp_stream, addr) = result;
+
+                        return Ok((tcp_stream, DomainOrSocketAddr::SocketAddr(addr)));
+                    }
+                }
+
+                SocketAddr::V4(peer_addr) => {
+                    if let Some(result) = self.handle_v4(peer_addr, tcp_stream).await? {
+                        let (tcp_stream, addr) = result;
+
+                        return Ok((tcp_stream, DomainOrSocketAddr::SocketAddr(addr)));
+                    }
+                }
+            }
+        }
+
+        error!("listener stop unexpectedly");
+
+        Err(Error::Io(io::Error::new(
+            ErrorKind::Other,
+            "listener stop unexpectedly",
+        )))
     }
 }

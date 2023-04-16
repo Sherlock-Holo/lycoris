@@ -10,9 +10,13 @@ pub struct Args {
 
     /// bpf elf path
     #[clap(short, long)]
-    pub bpf_elf: PathBuf,
+    pub bpf_elf: Option<PathBuf>,
 
     /// debug log
     #[clap(short, long, action)]
     pub debug: bool,
+
+    /// socks proxy addr, when set, disable bpf mode
+    #[clap(long)]
+    pub socks_listen: Option<String>,
 }

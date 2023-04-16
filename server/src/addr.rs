@@ -160,6 +160,9 @@ mod tests {
         data.put("www.example.com".as_bytes());
         data.put_u16(80);
 
-        assert!(!parse_addr(&data).await.unwrap().is_empty());
+        let addrs = parse_addr(&data).await.unwrap();
+        assert!(!addrs.is_empty());
+
+        dbg!(addrs);
     }
 }

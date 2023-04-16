@@ -18,7 +18,7 @@ use futures_util::StreamExt;
 use h2::server;
 use http::{HeaderMap, Response};
 use lycoris_client::bpf_share::{Ipv4Addr, Ipv6Addr};
-use lycoris_client::{Client, Connector, Listener, OwnedLink, TokenGenerator};
+use lycoris_client::{BpfListener, Client, Connector, OwnedLink, TokenGenerator};
 use nix::unistd::getuid;
 use share::helper::Ipv6AddrExt;
 use share::map_name::*;
@@ -217,7 +217,7 @@ async fn load_listener(
     bpf: &mut Bpf,
     listen_addr: SocketAddrV4,
     listen_addr_v6: SocketAddrV6,
-) -> Listener {
+) -> BpfListener {
     let ipv4_map = bpf
         .map_mut(IPV4_ADDR_MAP)
         .expect("IPV4_ADDR_MAP bpf lru map not found");
@@ -225,7 +225,7 @@ async fn load_listener(
         .map_mut(IPV6_ADDR_MAP)
         .expect("IPV6_ADDR_MAP bpf lru map not found");
 
-    Listener::new(listen_addr, listen_addr_v6, ipv4_map, ipv6_map)
+    BpfListener::new(listen_addr, listen_addr_v6, ipv4_map, ipv6_map)
         .await
         .unwrap()
 }

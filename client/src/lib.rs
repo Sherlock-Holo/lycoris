@@ -36,7 +36,9 @@ pub use crate::client::Client;
 use crate::config::Config;
 pub use crate::connect::Connector;
 pub use crate::err::Error;
-pub use crate::listener::Listener;
+#[doc(hidden)]
+pub use crate::listener::bpf::BpfListener;
+use crate::listener::socks::SocksListener;
 pub use crate::owned_link::OwnedLink;
 pub use crate::token::TokenGenerator;
 
@@ -56,16 +58,23 @@ pub async fn run() -> Result<(), Error> {
 
     init_log(args.debug);
 
-    let config = fs::read(args.config).await?;
+    let config = fs::read(&args.config).await?;
     let config = serde_yaml::from_slice::<Config>(&config)?;
 
     info!(?config, "load config done");
 
+    match &args.socks_listen {
+        None => run_bpf(args, config).await,
+        Some(http_listen) => run_socks(http_listen, config).await,
+    }
+}
+
+async fn run_bpf(args: Args, config: Config) -> Result<(), Error> {
     let remote_domain_ips = get_remote_domain_ips(&config.remote_domain).await?;
 
     info!(?remote_domain_ips, "get remote domain ip done");
 
-    let mut bpf = Bpf::load_file(args.bpf_elf)?;
+    let mut bpf = Bpf::load_file(args.bpf_elf.expect("bpf elf not set"))?;
 
     init_bpf_log(&mut bpf);
 
@@ -98,7 +107,7 @@ pub async fn run() -> Result<(), Error> {
 
     info!("load sockops done");
 
-    let v4_listener = load_listener(&mut bpf, config.listen_addr, config.listen_addr_v6).await?;
+    let bpf_listener = load_listener(&mut bpf, config.listen_addr, config.listen_addr_v6).await?;
 
     info!("load listener done");
 
@@ -113,7 +122,32 @@ pub async fn run() -> Result<(), Error> {
 
     info!("load connector done");
 
-    let mut client = Client::new(connector, v4_listener);
+    let mut client = Client::new(connector, bpf_listener);
+
+    client.start().await
+}
+
+async fn run_socks(http_listen: &str, config: Config) -> Result<(), Error> {
+    let http_listen = http_listen
+        .parse()
+        .map_err(|err| Error::Other(Box::new(err)))?;
+
+    let http_listener = SocksListener::new(http_listen).await?;
+
+    info!("create http listener done");
+
+    let connector = load_connector(
+        &config.remote_domain,
+        config.remote_port.unwrap_or(443),
+        config.ca_cert.as_deref(),
+        &config.token_secret,
+        &config.token_header,
+    )
+    .await?;
+
+    info!("load connector done");
+
+    let mut client = Client::new(connector, http_listener);
 
     client.start().await
 }
@@ -232,7 +266,7 @@ async fn load_listener(
     bpf: &mut Bpf,
     listen_addr: SocketAddrV4,
     listen_addr_v6: SocketAddrV6,
-) -> Result<Listener, Error> {
+) -> Result<BpfListener, Error> {
     let ipv4_map_ref_mut = bpf
         .map_mut(IPV4_ADDR_MAP)
         .expect("IPV4_ADDR_MAP bpf lru map not found");
@@ -241,7 +275,7 @@ async fn load_listener(
         .map_mut(IPV6_ADDR_MAP)
         .expect("IPV6_ADDR_MAP bpf lru map not found");
 
-    Listener::new(
+    BpfListener::new(
         listen_addr,
         listen_addr_v6,
         ipv4_map_ref_mut,
