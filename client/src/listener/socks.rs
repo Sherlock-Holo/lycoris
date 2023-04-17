@@ -2,9 +2,9 @@ use std::mem::size_of;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
 use async_trait::async_trait;
+use bytes::buf::IntoIter;
 use bytes::{Buf, BytesMut};
-use futures_channel::mpsc;
-use futures_channel::mpsc::{Receiver, Sender};
+use futures_channel::mpsc::{self, Receiver, Sender};
 use futures_util::{SinkExt, StreamExt};
 use tap::TapFallible;
 use tokio::io;
@@ -148,17 +148,7 @@ async fn socks_handshake(
         }
     }
 
-    let mut support_unauthorized = false;
-    while buf.has_remaining() {
-        // unauthorized mode
-        if buf.get_u8() == 0 {
-            support_unauthorized = true;
-
-            break;
-        }
-    }
-
-    if !support_unauthorized {
+    if !IntoIter::new(&mut buf).any(|unauthorized_mode| unauthorized_mode == 0) {
         error!("socks peer not supported unauthorized mode");
 
         let _ = stream.write_all(&[5, 0xff]).await;
