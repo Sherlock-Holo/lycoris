@@ -1,5 +1,5 @@
 use std::future::poll_fn;
-use std::io::{self, ErrorKind};
+use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -21,7 +21,7 @@ use share::h2_ping::AbortType;
 use tap::TapFallible;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
-use tokio::time;
+use tokio::{io, time};
 use tokio_rustls::rustls::{ClientConfig, ServerName};
 use tokio_rustls::{TlsConnector, TlsStream};
 use tracing::{error, info, instrument};
@@ -30,6 +30,8 @@ use crate::addr::domain_or_socket_addr::DomainOrSocketAddr;
 use crate::err::Error;
 use crate::token::TokenGenerator;
 use crate::{addr, get_remote_domain_ips};
+
+pub mod hyper;
 
 #[async_trait::async_trait]
 pub trait Connect {

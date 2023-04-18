@@ -8,7 +8,7 @@ use futures_util::future::poll_fn;
 use futures_util::StreamExt;
 use h2::client;
 use http::{HeaderMap, HeaderValue, Request};
-use lycoris_server::{Auth, Server};
+use lycoris_server::{Auth, H2Server};
 use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -47,7 +47,7 @@ async fn main() {
     let listener = TcpListener::bind("0.0.0.0:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 
-    let mut server = Server::new(TOTP_HEADER, auth, listener, tls_acceptor);
+    let mut server = H2Server::new(TOTP_HEADER, auth, listener, tls_acceptor);
 
     tokio::spawn(async move {
         if let Err(err) = server.start().await {

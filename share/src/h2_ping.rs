@@ -8,7 +8,7 @@ use tokio::time;
 use tokio_stream::wrappers::IntervalStream;
 use tracing::error;
 
-use crate::h2_config::{PING_INTERVAL, TIMEOUT};
+use crate::h2_config::{PING_INTERVAL, PING_TIMEOUT};
 
 #[derive(Debug)]
 pub enum AbortType {
@@ -20,7 +20,7 @@ pub async fn h2_connection_ping_pong(mut ping_pong: PingPong, abort_handle: Abor
     let mut interval_stream = IntervalStream::new(time::interval(PING_INTERVAL));
 
     while interval_stream.next().await.is_some() {
-        match time::timeout(TIMEOUT, ping_pong.ping(Ping::opaque())).await {
+        match time::timeout(PING_TIMEOUT, ping_pong.ping(Ping::opaque())).await {
             Err(_) => {
                 error!("h2 connection ping timeout");
 

@@ -15,6 +15,9 @@ pub enum Error {
     #[error("http/2 error: {0}")]
     H2(#[from] h2::Error),
 
+    #[error("hyper error: {0}")]
+    Hyper(#[from] hyper::Error),
+
     #[error("parse config failed: {0}")]
     Config(#[from] serde_yaml::Error),
 

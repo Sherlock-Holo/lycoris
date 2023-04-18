@@ -2,6 +2,7 @@ use totp_rs::{Algorithm, TOTP};
 
 use crate::err::Error;
 
+#[derive(Debug)]
 pub struct TokenGenerator {
     totp: TOTP,
 }

@@ -10,6 +10,9 @@ pub enum Error {
     #[error("http/2 error: {0}")]
     H2(#[from] h2::Error),
 
+    #[error("http error: {0}")]
+    Hyper(#[from] hyper::Error),
+
     #[error("address data is not enough")]
     AddrNotEnough,
 
