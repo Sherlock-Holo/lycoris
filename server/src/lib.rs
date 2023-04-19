@@ -17,15 +17,14 @@ use tracing_subscriber::{fmt, Registry};
 pub use crate::auth::Auth;
 use crate::config::Config;
 pub use crate::err::Error;
-pub use crate::server::H2Server;
-use crate::server::HyperServer;
+#[doc(hidden)]
+pub use crate::server::HyperServer;
 
 mod addr;
 mod args;
 mod auth;
 mod config;
 mod err;
-mod h2_connection;
 mod server;
 mod tls_accept;
 

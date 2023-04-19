@@ -6,7 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-h2 = { version = "0.3", features = ["stream"] }
 futures-util = { version = "0.3", features = ["io", "sink"] }
 bytes = "1"
 tokio = { version = "1", features = ["macros", "rt", "io-util", "net"] }

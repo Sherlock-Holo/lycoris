@@ -18,10 +18,9 @@ use futures_util::StreamExt;
 use h2::server;
 use http::{HeaderMap, Response};
 use lycoris_client::bpf_share::{Ipv4Addr, Ipv6Addr};
-use lycoris_client::{BpfListener, Client, Connector, OwnedLink, TokenGenerator};
+use lycoris_client::{BpfListener, Client, HyperConnector, OwnedLink, TokenGenerator};
 use nix::unistd::getuid;
 use share::helper::Ipv6AddrExt;
-use share::map_name::*;
 use tokio::fs;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
@@ -180,7 +179,7 @@ async fn load_connector(
     ca_cert: &Path,
     token_secret: &str,
     token_header: &str,
-) -> Connector {
+) -> HyperConnector {
     let mut root_cert_store = RootCertStore::empty();
 
     let ca_cert = fs::read(ca_cert).await.unwrap();
@@ -204,14 +203,13 @@ async fn load_connector(
         .with_no_client_auth();
     let token_generator = TokenGenerator::new(token_secret.to_string(), None).unwrap();
 
-    Connector::new(
+    HyperConnector::new(
         client_config,
         remote_domain,
         remote_port,
         token_generator,
         token_header,
     )
-    .await
     .unwrap()
 }
 

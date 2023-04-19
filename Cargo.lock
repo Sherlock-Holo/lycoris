@@ -824,9 +824,9 @@ dependencies = [
  "bytes",
  "clap",
  "futures-util",
- "h2",
  "http",
  "hyper",
+ "hyper-rustls",
  "rustls-pemfile",
  "serde",
  "serde_yaml",
@@ -839,6 +839,7 @@ dependencies = [
  "totp-rs",
  "tracing",
  "tracing-subscriber",
+ "webpki",
 ]
 
 [[package]]
@@ -1364,7 +1365,6 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "futures-util",
- "h2",
  "http",
  "hyper",
  "tap",

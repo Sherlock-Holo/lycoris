@@ -22,7 +22,6 @@ tracing-subscriber = "0.3"
 totp-rs = { version = "5", features = ["otpauth"] }
 
 # http/2
-h2 = { version = "0.3", features = ["stream"] }
 http = "0.2"
 hyper = { version = "0.14", features = ["runtime", "http2", "http1", "server", "stream"] }
 
@@ -36,3 +35,8 @@ serde_yaml = "0.9"
 clap = { version = "3", features = ["derive", "color", "suggestions"] }
 
 share = { path = "../share" }
+
+[dev-dependencies]
+webpki = { version = "0.22", features = ["std"] }
+hyper-rustls = { version = "0.24", features = ["http2", "logging"] }
+hyper = { version = "0.14", features = ["client"] }

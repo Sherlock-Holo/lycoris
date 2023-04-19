@@ -4,30 +4,29 @@ use std::path::Path;
 use std::sync::Arc;
 
 use bytes::{BufMut, Bytes, BytesMut};
-use futures_util::future::poll_fn;
 use futures_util::StreamExt;
-use h2::client;
-use http::{HeaderMap, HeaderValue, Request};
-use lycoris_server::{Auth, H2Server};
+use http::{HeaderMap, HeaderValue, Request, Uri};
+use hyper::{Body, Client};
+use hyper_rustls::HttpsConnectorBuilder;
+use lycoris_server::{Auth, HyperServer};
 use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpListener;
 use tokio_rustls::rustls::{
     Certificate, ClientConfig, OwnedTrustAnchor, PrivateKey, RootCertStore, ServerConfig,
-    ServerName,
 };
-use tokio_rustls::webpki::TrustAnchor;
-use tokio_rustls::{TlsAcceptor, TlsConnector};
+use tokio_rustls::TlsAcceptor;
 use totp_rs::{Algorithm, TOTP};
 use tracing::level_filters::LevelFilter;
-use tracing::{debug, error, subscriber};
+use tracing::{debug, subscriber};
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{fmt, Registry};
+use webpki::TrustAnchor;
 
 #[tokio::test]
 async fn main() {
-    const TOTP_SECRET: &str = "test";
+    const TOTP_SECRET: &str = "test-secrettest-secret";
     const TOTP_HEADER: &str = "x-secret";
 
     init_log();
@@ -44,10 +43,10 @@ async fn main() {
     let client_config = create_client_config().await;
 
     let tls_acceptor = TlsAcceptor::from(Arc::new(server_config));
-    let listener = TcpListener::bind("0.0.0.0:0").await.unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 
-    let mut server = H2Server::new(TOTP_HEADER, auth, listener, tls_acceptor);
+    let mut server = HyperServer::new(TOTP_HEADER, auth, listener, tls_acceptor);
 
     tokio::spawn(async move {
         if let Err(err) = server.start().await {
@@ -55,34 +54,18 @@ async fn main() {
         }
     });
 
-    let tcp_stream = TcpStream::connect(addr).await.unwrap();
-    let tls_connector = TlsConnector::from(Arc::new(client_config));
-
-    let tls_stream = tls_connector
-        .connect(ServerName::try_from("localhost").unwrap(), tcp_stream)
-        .await
-        .unwrap();
-
-    let (mut send_request, connection) = client::handshake(tls_stream).await.unwrap();
-    tokio::spawn(async move {
-        if let Err(err) = connection.await {
-            error!("{}", err);
-        }
-    });
-
-    send_request = send_request.ready().await.unwrap();
+    let https_connector = HttpsConnectorBuilder::new()
+        .with_tls_config(client_config)
+        .https_only()
+        .with_server_name("localhost".to_string())
+        .enable_http2()
+        .build();
+    let client = Client::builder().http2_only(true).build(https_connector);
 
     let totp = create_totp(TOTP_SECRET.to_string());
     let secret = totp.generate_current().unwrap();
 
-    let mut request = Request::new(());
-    request
-        .headers_mut()
-        .append(TOTP_HEADER, HeaderValue::from_str(&secret).unwrap());
-
-    let (response, mut send_stream) = send_request.send_request(request, false).unwrap();
-
-    let remote_listener = TcpListener::bind("0.0.0.0:0").await.unwrap();
+    let remote_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let remote_addr = remote_listener.local_addr().unwrap();
 
     let task = tokio::spawn(async move {
@@ -104,46 +87,33 @@ async fn main() {
         panic!("{} is not ipv4", remote_addr.ip());
     };
 
-    send_stream.reserve_capacity(1 + 4 + 2);
-    while send_stream.capacity() < 1 + 4 + 2 {
-        poll_fn(|cx| send_stream.poll_capacity(cx))
-            .await
-            .unwrap()
-            .unwrap();
-    }
+    let (mut sender, body) = Body::channel();
+    let mut request = Request::new(body);
+    *request.uri_mut() = Uri::try_from(format!("https://localhost:{}", addr.port())).unwrap();
+    request
+        .headers_mut()
+        .append(TOTP_HEADER, HeaderValue::from_str(&secret).unwrap());
 
     let mut buf = BytesMut::with_capacity(1 + 4 + 2);
     buf.put_u8(4);
     buf.put(remote_ip.as_slice());
     buf.put_u16(remote_addr.port());
 
-    send_stream.send_data(buf.freeze(), false).unwrap();
+    sender.send_data(buf.freeze()).await.unwrap();
 
-    let recv_stream = response.await.unwrap();
-    let mut recv_stream = recv_stream.into_body();
+    let response = client.request(request).await.unwrap();
+
+    let mut recv_stream = response.into_body();
 
     let data = recv_stream.next().await.unwrap().unwrap();
     assert_eq!(data.as_ref(), b"test");
 
-    recv_stream
-        .flow_control()
-        .release_capacity(data.len())
-        .unwrap();
-
-    send_stream.reserve_capacity(4);
-    while send_stream.capacity() < 4 {
-        poll_fn(|cx| send_stream.poll_capacity(cx))
-            .await
-            .unwrap()
-            .unwrap();
-    }
-
-    send_stream
-        .send_data(Bytes::from_static(b"test"), false)
-        .unwrap();
-    send_stream.send_trailers(HeaderMap::new()).unwrap();
+    sender.send_data(Bytes::from_static(b"test")).await.unwrap();
+    sender.send_trailers(HeaderMap::new()).await.unwrap();
 
     debug!("send trailers done");
+
+    drop(sender);
 
     task.await.unwrap();
 
@@ -189,13 +159,13 @@ async fn create_client_config() -> ClientConfig {
         .with_no_client_auth()
 }
 
-fn create_totp(secret: String) -> TOTP<String> {
+fn create_totp(secret: String) -> TOTP {
     TOTP::new(
         Algorithm::SHA512,
         8,
         1,
         30,
-        secret,
+        secret.into(),
         None,
         "default_account".to_string(),
     )

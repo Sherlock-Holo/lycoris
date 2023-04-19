@@ -7,9 +7,6 @@ pub enum Error {
     #[error("io error: {0}")]
     Io(#[from] IoError),
 
-    #[error("http/2 error: {0}")]
-    H2(#[from] h2::Error),
-
     #[error("http error: {0}")]
     Hyper(#[from] hyper::Error),
 
