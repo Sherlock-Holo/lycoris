@@ -8,7 +8,10 @@ use http::{Request, StatusCode, Uri, Version};
 use hyper::client::HttpConnector;
 use hyper::{Body, Client};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
-use share::h2_config::{INITIAL_CONNECTION_WINDOW_SIZE, INITIAL_WINDOW_SIZE, MAX_FRAME_SIZE};
+use share::h2_config::{
+    INITIAL_CONNECTION_WINDOW_SIZE, INITIAL_WINDOW_SIZE, MAX_FRAME_SIZE, PING_INTERVAL,
+    PING_TIMEOUT,
+};
 use share::hyper_body::{BodyStream, SinkBodySender};
 use tap::TapFallible;
 use tokio_rustls::rustls::ClientConfig;
@@ -52,6 +55,8 @@ impl HyperConnector {
             .http2_initial_connection_window_size(INITIAL_WINDOW_SIZE)
             .http2_initial_connection_window_size(INITIAL_CONNECTION_WINDOW_SIZE)
             .http2_max_frame_size(MAX_FRAME_SIZE)
+            .http2_keep_alive_timeout(PING_TIMEOUT)
+            .http2_keep_alive_interval(PING_INTERVAL)
             .build(https_connector);
 
         Ok(Self {
