@@ -9,4 +9,4 @@ pub const MAX_FRAME_SIZE: u32 = 16777215;
 /// ping interval
 pub const PING_INTERVAL: Duration = Duration::from_secs(10);
 /// ping timeout
-pub const TIMEOUT: Duration = Duration::from_secs(10);
+pub const PING_TIMEOUT: Duration = Duration::from_secs(10);

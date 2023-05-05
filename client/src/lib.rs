@@ -34,9 +34,8 @@ use crate::args::Args;
 use crate::bpf_share::{Ipv4Addr as ShareIpv4Addr, Ipv6Addr as ShareIpv6Addr};
 pub use crate::client::Client;
 use crate::config::Config;
-pub use crate::connect::Connector;
+pub use crate::connect::hyper::HyperConnector;
 pub use crate::err::Error;
-#[doc(hidden)]
 pub use crate::listener::bpf::BpfListener;
 use crate::listener::socks::SocksListener;
 pub use crate::owned_link::OwnedLink;
@@ -302,7 +301,7 @@ async fn load_connector(
     ca_cert: Option<&Path>,
     token_secret: &str,
     token_header: &str,
-) -> Result<Connector, Error> {
+) -> Result<HyperConnector, Error> {
     let mut root_cert_store = RootCertStore::empty();
     root_cert_store.add_server_trust_anchors(TLS_SERVER_ROOTS.0.iter().map(|ta| {
         OwnedTrustAnchor::from_subject_spki_name_constraints(
@@ -339,14 +338,13 @@ async fn load_connector(
         .with_no_client_auth();
     let token_generator = TokenGenerator::new(token_secret.to_string(), None)?;
 
-    Connector::new(
+    HyperConnector::new(
         client_config,
         remote_domain,
         remote_port,
         token_generator,
         token_header,
     )
-    .await
 }
 
 async fn set_proxy_ip_list<'a, I: Iterator<Item = &'a Path>>(

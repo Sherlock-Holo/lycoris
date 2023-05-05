@@ -17,15 +17,16 @@ use tracing_subscriber::{fmt, Registry};
 pub use crate::auth::Auth;
 use crate::config::Config;
 pub use crate::err::Error;
-pub use crate::server::Server;
+#[doc(hidden)]
+pub use crate::server::HyperServer;
 
 mod addr;
 mod args;
 mod auth;
 mod config;
 mod err;
-mod h2_connection;
 mod server;
+mod tls_accept;
 
 pub async fn run() -> Result<(), Error> {
     let args = Args::parse();
@@ -50,7 +51,7 @@ pub async fn run() -> Result<(), Error> {
 
     let auth = Auth::new(config.token_secret, None)?;
 
-    let mut server = Server::new(&config.token_header, auth, tcp_listener, tls_acceptor);
+    let mut server = HyperServer::new(&config.token_header, auth, tcp_listener, tls_acceptor);
 
     server.start().await
 }
