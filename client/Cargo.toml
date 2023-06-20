@@ -27,10 +27,8 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 
 # bpf
-aya = { git = "https://github.com/aya-rs/aya", tag = "aya-log-v0.1.11", features = ["async_tokio"] }
-
-# bpf log
-aya-log = { git = "https://github.com/aya-rs/aya", tag = "aya-log-v0.1.11" }
+aya = { git = "https://github.com/aya-rs/aya", rev = "58f1ecb", features = ["async_tokio"] }
+aya-log = { git = "https://github.com/aya-rs/aya", rev = "58f1ecb" }
 tracing-log = "0.1"
 
 # auth

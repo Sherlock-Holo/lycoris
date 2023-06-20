@@ -77,18 +77,18 @@ async fn run_bpf(args: Args, config: Config) -> Result<(), Error> {
 
     init_bpf_log(&mut bpf);
 
-    set_proxy_addr(&bpf, config.listen_addr, config.listen_addr_v6)?;
+    set_proxy_addr(&mut bpf, config.listen_addr, config.listen_addr_v6)?;
 
     info!(listen_addr = %config.listen_addr, "set proxy addr done");
 
-    set_proxy_ip_list(&bpf, config.ip_list.iter().map(|path| path.as_path())).await?;
+    set_proxy_ip_list(&mut bpf, config.ip_list.iter().map(|path| path.as_path())).await?;
 
     info!("set target ip done");
 
-    set_proxy_ip_list_mode(&bpf, config.blacklist_mode)?;
+    set_proxy_ip_list_mode(&mut bpf, config.blacklist_mode)?;
 
     if !config.blacklist_mode {
-        append_remote_ip_list(&bpf, &remote_domain_ips)?;
+        append_remote_ip_list(&mut bpf, &remote_domain_ips)?;
     }
 
     info!(
@@ -231,12 +231,12 @@ async fn load_established_sockops(
 }
 
 fn set_proxy_addr(
-    bpf: &Bpf,
+    bpf: &mut Bpf,
     mut addr: SocketAddrV4,
     mut addr_v6: SocketAddrV6,
 ) -> Result<(), Error> {
     let mut v4_proxy_server: Array<_, ShareIpv4Addr> = bpf
-        .map_mut(PROXY_IPV4_CLIENT)
+        .take_map(PROXY_IPV4_CLIENT)
         .expect("PROXY_IPV4_CLIENT bpf array not found")
         .try_into()?;
 
@@ -254,7 +254,7 @@ fn set_proxy_addr(
     v4_proxy_server.set(0, proxy_addr, 0)?;
 
     let mut v6_proxy_server: Array<_, ShareIpv6Addr> = bpf
-        .map_mut(PROXY_IPV6_CLIENT)
+        .take_map(PROXY_IPV6_CLIENT)
         .expect("PROXY_IPV6_CLIENT bpf array not found")
         .try_into()?;
 
@@ -279,11 +279,11 @@ async fn load_listener(
     listen_addr_v6: SocketAddrV6,
 ) -> Result<BpfListener, Error> {
     let ipv4_map_ref_mut = bpf
-        .map_mut(IPV4_ADDR_MAP)
+        .take_map(IPV4_ADDR_MAP)
         .expect("IPV4_ADDR_MAP bpf lru map not found");
 
     let ipv6_map_ref_mut = bpf
-        .map_mut(IPV6_ADDR_MAP)
+        .take_map(IPV6_ADDR_MAP)
         .expect("IPV6_ADDR_MAP bpf lru map not found");
 
     BpfListener::new(
@@ -348,16 +348,16 @@ async fn load_connector(
 }
 
 async fn set_proxy_ip_list<'a, I: Iterator<Item = &'a Path>>(
-    bpf: &Bpf,
+    bpf: &mut Bpf,
     ip_list_paths: I,
 ) -> Result<(), Error> {
-    let proxy_ipv4_list: LpmTrie<_, [u8; 4], u8> = bpf
-        .map_mut(PROXY_IPV4_LIST)
+    let mut proxy_ipv4_list: LpmTrie<_, [u8; 4], u8> = bpf
+        .take_map(PROXY_IPV4_LIST)
         .expect("PROXY_IPV4_LIST not found")
         .try_into()?;
 
-    let proxy_ipv6_list: LpmTrie<_, [u16; 8], u8> = bpf
-        .map_mut(PROXY_IPV6_LIST)
+    let mut proxy_ipv6_list: LpmTrie<_, [u16; 8], u8> = bpf
+        .take_map(PROXY_IPV6_LIST)
         .expect("PROXY_IPV6_LIST not found")
         .try_into()?;
 
@@ -414,8 +414,8 @@ async fn set_proxy_ip_list<'a, I: Iterator<Item = &'a Path>>(
     Ok(())
 }
 
-fn append_remote_ip_list(bpf: &Bpf, remote_domain_ip: &[IpAddr]) -> Result<(), Error> {
-    let proxy_ipv4_list: LpmTrie<_, [u8; 4], u8> = bpf
+fn append_remote_ip_list(bpf: &mut Bpf, remote_domain_ip: &[IpAddr]) -> Result<(), Error> {
+    let mut proxy_ipv4_list: LpmTrie<_, [u8; 4], u8> = bpf
         .map_mut(PROXY_IPV4_LIST)
         .expect("PROXY_IPV4_LIST not found")
         .try_into()?;
@@ -433,7 +433,7 @@ fn append_remote_ip_list(bpf: &Bpf, remote_domain_ip: &[IpAddr]) -> Result<(), E
     Ok(())
 }
 
-fn set_proxy_ip_list_mode(bpf: &Bpf, blacklist_mode: bool) -> Result<(), Error> {
+fn set_proxy_ip_list_mode(bpf: &mut Bpf, blacklist_mode: bool) -> Result<(), Error> {
     let mut proxy_ipv4_list_mode: Array<_, u8> = bpf
         .map_mut(PROXY_IPV4_LIST_MODE)
         .expect("PROXY_IPV4_LIST_MODE not found")

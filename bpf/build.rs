@@ -22,6 +22,7 @@ fn generate_require() {
         .header("require.h")
         .allowlist_type(".*")
         .allowlist_var(".*")
+        .size_t_is_usize(false)
         .generate()
         .unwrap();
 

@@ -2,7 +2,7 @@ use std::io::{self, ErrorKind};
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 
 use async_trait::async_trait;
-use aya::maps::{HashMap, MapRefMut};
+use aya::maps::{HashMap, Map, MapData};
 use futures_util::stream::Select;
 use futures_util::{stream, StreamExt};
 use share::helper::Ipv6AddrExt;
@@ -22,8 +22,8 @@ use crate::err::Error;
 const MAX_RETRY: usize = 3;
 
 pub struct BpfListener {
-    v4_dst_addr_map: DstAddrLookup<HashMap<MapRefMut, ConnectedIpv4Addr, ShareIpv4Addr>>,
-    v6_dst_addr_map: DstAddrLookup<HashMap<MapRefMut, ConnectedIpv6Addr, ShareIpv6Addr>>,
+    v4_dst_addr_map: DstAddrLookup<HashMap<MapData, ConnectedIpv4Addr, ShareIpv4Addr>>,
+    v6_dst_addr_map: DstAddrLookup<HashMap<MapData, ConnectedIpv6Addr, ShareIpv6Addr>>,
     listen_addr: SocketAddrV4,
     listen_addr_v6: SocketAddrV6,
     tcp_listener: Select<TcpListenerAddrStream, TcpListenerAddrStream>,
@@ -33,8 +33,8 @@ impl BpfListener {
     pub async fn new(
         listen_addr: SocketAddrV4,
         listen_addr_v6: SocketAddrV6,
-        ipv4_map_ref_mut: MapRefMut,
-        ipv6_map_ref_mut: MapRefMut,
+        ipv4_map_ref_mut: Map,
+        ipv6_map_ref_mut: Map,
     ) -> Result<Self, Error> {
         let tcp_listener = TcpListener::bind(listen_addr)
             .await

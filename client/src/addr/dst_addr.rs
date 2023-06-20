@@ -1,7 +1,7 @@
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::time::Duration;
 
-use aya::maps::{HashMap, MapError, MapRefMut};
+use aya::maps::{HashMap, MapData, MapError};
 use aya::Pod;
 use share::helper::ArrayExt;
 use tap::TapFallible;
@@ -20,13 +20,13 @@ pub trait LimitedBpfHashMap<K: Pod, V: Pod> {
     fn remove(&mut self, key: &K) -> Result<(), MapError>;
 }
 
-impl<K: Pod, V: Pod> LimitedBpfHashMap<K, V> for HashMap<MapRefMut, K, V> {
+impl<K: Pod, V: Pod> LimitedBpfHashMap<K, V> for HashMap<MapData, K, V> {
     fn get(&self, key: &K) -> Result<V, MapError> {
-        HashMap::<MapRefMut, K, V>::get(self, key, 0)
+        HashMap::<MapData, K, V>::get(self, key, 0)
     }
 
     fn remove(&mut self, key: &K) -> Result<(), MapError> {
-        HashMap::<MapRefMut, K, V>::remove(self, key)
+        HashMap::<MapData, K, V>::remove(self, key)
     }
 }
 
