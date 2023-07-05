@@ -36,8 +36,8 @@ pub struct ConnectedIpv6Addr {
     pub sport: u16,
     pub dport: u16,
 
-    pub saddr: [u16; 8],
-    pub daddr: [u16; 8],
+    pub saddr: [u8; 16],
+    pub daddr: [u8; 16],
 }
 
 #[repr(C)]
@@ -57,6 +57,11 @@ fn should_proxy(is_blacklist_mode: bool, in_list: bool) -> bool {
 }
 
 #[inline]
-fn get_ipv6_octets(addr: [u16; 8]) -> [u8; 16] {
+fn u16_ipv6_to_u8_ipv6(addr: [u16; 8]) -> [u8; 16] {
+    unsafe { mem::transmute(addr) }
+}
+
+#[inline]
+fn u32_ipv6_to_u8_ipv6(addr: [u32; 4]) -> [u8; 16] {
     unsafe { mem::transmute(addr) }
 }

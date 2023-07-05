@@ -7,8 +7,8 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-aya-bpf = { git = "https://github.com/aya-rs/aya", rev = "58f1ecb" }
-aya-log-ebpf = { git = "https://github.com/aya-rs/aya", rev = "58f1ecb" }
+aya-bpf = { git = "https://github.com/aya-rs/aya", rev = "5c86b7e" }
+aya-log-ebpf = { git = "https://github.com/aya-rs/aya", rev = "5c86b7e" }
 
 [build-dependencies]
 bindgen = "0.65"

@@ -47,7 +47,7 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
 
     let in_list = PROXY_IPV4_LIST.get(&key).copied().unwrap_or(0) > 0;
     if !should_proxy(is_blacklist_mode, in_list) {
-        debug!(&ctx, "{:ipv4} is direct connect ip", user_ip4_u32);
+        debug!(&ctx, "{:i} is direct connect ip", user_ip4_u32);
 
         return Ok(());
     }
@@ -56,7 +56,7 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
         None => {
             debug!(
                 &ctx,
-                "maybe proxy server is not set yet, let {:ipv4} connect directly", user_ip4_u32
+                "maybe proxy server is not set yet, let {:i} connect directly", user_ip4_u32
             );
 
             return Ok(());
@@ -68,17 +68,17 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
     if user_ip4 == proxy_client.addr {
         debug!(
             &ctx,
-            "proxy client ip {:ipv4} need connect directly", user_ip4_u32
+            "proxy client ip {:i} need connect directly", user_ip4_u32
         );
 
         return Ok(());
     }
 
-    debug!(&ctx, "{:ipv4} need proxy", user_ip4_u32);
+    debug!(&ctx, "{:i} need proxy", user_ip4_u32);
 
     debug!(
         &ctx,
-        "get proxy server done {:ipv4}",
+        "get proxy server done {:i}",
         u32::from_be_bytes(proxy_client.addr)
     );
 

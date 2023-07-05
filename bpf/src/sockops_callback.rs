@@ -4,11 +4,12 @@ use core::mem;
 use aya_bpf::bindings::BPF_SOCK_OPS_ACTIVE_ESTABLISHED_CB;
 use aya_bpf::helpers::*;
 use aya_bpf::programs::SockOpsContext;
-use aya_log_ebpf::debug;
+use aya_log_ebpf::macro_support::IpFormatter;
+use aya_log_ebpf::{debug, WriteToBuf};
 
 use crate::kernel_binding::require::{AF_INET, AF_INET6};
 use crate::map::*;
-use crate::{get_ipv6_octets, ConnectedIpv4Addr, ConnectedIpv6Addr};
+use crate::{u16_ipv6_to_u8_ipv6, ConnectedIpv4Addr, ConnectedIpv6Addr};
 
 /// when the socket is active established, get origin_dst_ipv4_addr by its cookie, if not exists,
 /// ignore it because this socket doesn't a need proxy socket
@@ -21,7 +22,8 @@ pub fn handle_sockops(ctx: SockOpsContext) -> Result<(), c_long> {
     }
 
     if ctx.family() == AF_INET {
-        handle_ipv4(ctx)
+        // handle_ipv4(ctx)
+        Ok(())
     } else if ctx.family() == AF_INET6 {
         handle_ipv6(ctx)
     } else {
@@ -48,7 +50,7 @@ fn handle_ipv4(ctx: SockOpsContext) -> Result<(), c_long> {
 
     debug!(
         &ctx,
-        "get origin dst addr {:ipv4} done",
+        "get origin dst addr {:i} done",
         u32::from_be_bytes(origin_dst_ipv4_addr.addr),
         origin_dst_ipv4_addr.port
     );
@@ -56,11 +58,12 @@ fn handle_ipv4(ctx: SockOpsContext) -> Result<(), c_long> {
     let saddr = u32::from_be(ctx.local_ip4()).to_be_bytes();
     let sport = ctx.local_port() as u16;
     let daddr = u32::from_be(ctx.remote_ip4()).to_be_bytes();
-    let dport = u32::from_be(ctx.remote_port()) as u16;
+    let dport = u32::from_be(ctx.remote_port());
+    let dport = dport as u16;
 
     debug!(
         &ctx,
-        "saddr {:ipv4}:{} , daddr {:ipv4}:{}",
+        "saddr {:i}:{} , daddr {:i}:{}",
         u32::from_be_bytes(saddr),
         sport,
         u32::from_be_bytes(daddr),
@@ -98,28 +101,27 @@ fn handle_ipv6(ctx: SockOpsContext) -> Result<(), c_long> {
 
     debug!(
         &ctx,
-        "get origin dst addr [{:ipv6}]:{} done",
-        get_ipv6_octets(origin_dst_ipv6_addr.addr),
+        "get origin dst addr [{:i}]:{} done",
+        u16_ipv6_to_u8_ipv6(origin_dst_ipv6_addr.addr),
         origin_dst_ipv6_addr.port
     );
 
-    let saddr = copy_local_ip6(&ctx);
-    let saddr_octets = get_ipv6_octets(saddr);
+    let saddr = U32Array4(ctx.local_ip6());
     let sport = ctx.local_port() as u16;
-    let daddr = copy_remote_ip6(&ctx);
-    let daddr_octets = get_ipv6_octets(daddr);
-    let dport = u32::from_be(ctx.remote_port()) as u16;
+    let daddr = U32Array4(ctx.remote_ip6());
+    let dport = u32::from_be(ctx.remote_port());
+    let dport = dport as u16;
 
     debug!(
         &ctx,
-        "saddr [{:ipv6}]:{} , daddr [{:ipv6}]:{}", saddr_octets, sport, daddr_octets, dport,
+        "saddr [{:i}]:{} , daddr [{:i}]:{}", saddr, sport, daddr, dport,
     );
 
     let connected_ipv6_addr = ConnectedIpv6Addr {
         sport,
         dport,
-        saddr,
-        daddr,
+        saddr: unsafe { mem::transmute(saddr) },
+        daddr: unsafe { mem::transmute(daddr) },
     };
 
     IPV6_ADDR_MAP.insert(&connected_ipv6_addr, &origin_dst_ipv6_addr, 0)?;
@@ -127,28 +129,22 @@ fn handle_ipv6(ctx: SockOpsContext) -> Result<(), c_long> {
     Ok(())
 }
 
-fn copy_local_ip6(ctx: &SockOpsContext) -> [u16; 8] {
-    let ops = unsafe { &*ctx.ops };
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[repr(transparent)]
+struct U32Array4([u32; 4]);
 
-    let ip6 = [
-        ops.local_ip6[0],
-        ops.local_ip6[1],
-        ops.local_ip6[2],
-        ops.local_ip6[3],
-    ];
-
-    unsafe { mem::transmute(ip6) }
+impl From<[u32; 4]> for U32Array4 {
+    #[inline]
+    fn from(value: [u32; 4]) -> Self {
+        Self(value)
+    }
 }
 
-fn copy_remote_ip6(ctx: &SockOpsContext) -> [u16; 8] {
-    let ops = unsafe { &*ctx.ops };
-
-    let ip6 = [
-        ops.remote_ip6[0],
-        ops.remote_ip6[1],
-        ops.remote_ip6[2],
-        ops.remote_ip6[3],
-    ];
-
-    unsafe { mem::transmute(ip6) }
+impl WriteToBuf for U32Array4 {
+    fn write(self, buf: &mut [u8]) -> Result<usize, ()> {
+        let v = unsafe { *(self.0.as_ptr() as *const u128) };
+        v.to_be_bytes().write(buf)
+    }
 }
+
+impl IpFormatter for U32Array4 {}

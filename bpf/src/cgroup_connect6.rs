@@ -9,7 +9,7 @@ use aya_log_ebpf::debug;
 
 use crate::kernel_binding::require;
 use crate::map::*;
-use crate::{get_ipv6_octets, Ipv6Addr};
+use crate::{u16_ipv6_to_u8_ipv6, Ipv6Addr};
 
 /// check connect ipv6 in proxy ipv6 list or not, if in list, save the origin dst ipv6 addr into
 /// DST_IPV6_ADDR_STORE with (cookie, origin_dst_ipv6_addr), otherwise let it connect directly
@@ -33,7 +33,7 @@ pub fn handle_cgroup_connect6(ctx: SockAddrContext) -> Result<(), c_long> {
     }
 
     let user_ipv6 = get_ipv6_segments(sock_addr);
-    let user_ipv6_octets = get_ipv6_octets(user_ipv6);
+    let user_ipv6_octets = u16_ipv6_to_u8_ipv6(user_ipv6);
     let key = Key::new(128, user_ipv6);
 
     let is_blacklist_mode = match PROXY_IPV4_LIST_MODE.get(0) {
@@ -48,7 +48,7 @@ pub fn handle_cgroup_connect6(ctx: SockAddrContext) -> Result<(), c_long> {
 
     let in_list = PROXY_IPV6_LIST.get(&key).copied().unwrap_or(0) > 0;
     if !crate::should_proxy(is_blacklist_mode, in_list) {
-        debug!(&ctx, "{:ipv6} is direct connect ip", user_ipv6_octets);
+        // debug!(&ctx, "{:ipv6} is direct connect ip", user_ipv6_octets);
 
         return Ok(());
     }
@@ -57,7 +57,7 @@ pub fn handle_cgroup_connect6(ctx: SockAddrContext) -> Result<(), c_long> {
         None => {
             debug!(
                 &ctx,
-                "maybe proxy server is not set yet, let {:ipv6} connect directly", user_ipv6_octets
+                "maybe proxy server is not set yet, let {:i} connect directly", user_ipv6_octets
             );
 
             return Ok(());
@@ -69,18 +69,18 @@ pub fn handle_cgroup_connect6(ctx: SockAddrContext) -> Result<(), c_long> {
     if user_ipv6 == proxy_client.addr {
         debug!(
             &ctx,
-            "proxy client ip {:ipv6} need connect directly", user_ipv6_octets
+            "proxy client ip {:i} need connect directly", user_ipv6_octets
         );
 
         return Ok(());
     }
 
-    debug!(&ctx, "{:ipv6} need proxy", user_ipv6_octets);
+    debug!(&ctx, "{:i} need proxy", user_ipv6_octets);
 
     debug!(
         &ctx,
-        "get proxy server done [{:ipv6}]:{}",
-        get_ipv6_octets(proxy_client.addr),
+        "get proxy server done [{:i}]:{}",
+        u16_ipv6_to_u8_ipv6(proxy_client.addr),
         proxy_client.port
     );
 
