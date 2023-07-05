@@ -237,7 +237,7 @@ fn set_proxy_addr(
     mut addr_v6: SocketAddrV6,
 ) -> Result<(), Error> {
     let mut v4_proxy_server: Array<_, ShareIpv4Addr> = bpf
-        .take_map(PROXY_IPV4_CLIENT)
+        .map_mut(PROXY_IPV4_CLIENT)
         .expect("PROXY_IPV4_CLIENT bpf array not found")
         .try_into()?;
 
@@ -255,7 +255,7 @@ fn set_proxy_addr(
     v4_proxy_server.set(0, proxy_addr, 0)?;
 
     let mut v6_proxy_server: Array<_, ShareIpv6Addr> = bpf
-        .take_map(PROXY_IPV6_CLIENT)
+        .map_mut(PROXY_IPV6_CLIENT)
         .expect("PROXY_IPV6_CLIENT bpf array not found")
         .try_into()?;
 
@@ -352,16 +352,6 @@ async fn set_proxy_ip_list<'a, I: Iterator<Item = &'a Path>>(
     bpf: &mut Bpf,
     ip_list_paths: I,
 ) -> Result<(), Error> {
-    let mut proxy_ipv4_list: LpmTrie<_, [u8; 4], u8> = bpf
-        .take_map(PROXY_IPV4_LIST)
-        .expect("PROXY_IPV4_LIST not found")
-        .try_into()?;
-
-    let mut proxy_ipv6_list: LpmTrie<_, [u16; 8], u8> = bpf
-        .take_map(PROXY_IPV6_LIST)
-        .expect("PROXY_IPV6_LIST not found")
-        .try_into()?;
-
     for ip_list_path in ip_list_paths {
         let ip_list = File::open(ip_list_path).await?;
         let mut reader = LinesStream::new(BufReader::new(ip_list).lines());
@@ -387,6 +377,11 @@ async fn set_proxy_ip_list<'a, I: Iterator<Item = &'a Path>>(
                     }
 
                     Ok(ipv6_net) => {
+                        let mut proxy_ipv6_list: LpmTrie<_, [u16; 8], u8> = bpf
+                            .map_mut(PROXY_IPV6_LIST)
+                            .expect("PROXY_IPV6_LIST not found")
+                            .try_into()?;
+
                         proxy_ipv6_list.insert(
                             &Key::new(
                                 ipv6_net.network_length() as _,
@@ -399,6 +394,11 @@ async fn set_proxy_ip_list<'a, I: Iterator<Item = &'a Path>>(
                 },
 
                 Ok(ipv4_inet) => {
+                    let mut proxy_ipv4_list: LpmTrie<_, [u8; 4], u8> = bpf
+                        .map_mut(PROXY_IPV4_LIST)
+                        .expect("PROXY_IPV4_LIST not found")
+                        .try_into()?;
+
                     proxy_ipv4_list.insert(
                         &Key::new(
                             ipv4_inet.network_length() as _,
