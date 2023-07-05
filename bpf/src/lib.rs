@@ -60,8 +60,3 @@ fn should_proxy(is_blacklist_mode: bool, in_list: bool) -> bool {
 fn u16_ipv6_to_u8_ipv6(addr: [u16; 8]) -> [u8; 16] {
     unsafe { mem::transmute(addr) }
 }
-
-#[inline]
-fn u32_ipv6_to_u8_ipv6(addr: [u32; 4]) -> [u8; 16] {
-    unsafe { mem::transmute(addr) }
-}

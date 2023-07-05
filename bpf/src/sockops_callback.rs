@@ -22,8 +22,7 @@ pub fn handle_sockops(ctx: SockOpsContext) -> Result<(), c_long> {
     }
 
     if ctx.family() == AF_INET {
-        // handle_ipv4(ctx)
-        Ok(())
+        handle_ipv4(ctx)
     } else if ctx.family() == AF_INET6 {
         handle_ipv6(ctx)
     } else {
