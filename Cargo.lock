@@ -23,9 +23,9 @@ version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c99f64d1e06488f620f932677e24bc6e2897582980441ae90a671415bd7ec2f"
 dependencies = [
-    "cfg-if",
-    "once_cell",
-    "version_check",
+ "cfg-if",
+ "once_cell",
+ "version_check",
 ]
 
 [[package]]
@@ -40,9 +40,9 @@ version = "0.1.70"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "79fa67157abdfd688a259b6648808757db9347af834624f27ec646da976aee5d"
 dependencies = [
-    "proc-macro2",
-    "quote",
-    "syn 2.0.23",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.23",
 ]
 
 [[package]]
@@ -67,15 +67,15 @@ name = "aya"
 version = "0.11.0"
 source = "git+https://github.com/aya-rs/aya?rev=5c86b7e#5c86b7ee950762d1cc37fc39c788e670869db231"
 dependencies = [
-    "aya-obj",
-    "bitflags 2.3.3",
-    "bytes",
-    "lazy_static",
-    "libc",
-    "log",
-    "object",
-    "parking_lot",
-    "thiserror",
+ "aya-obj",
+ "bitflags 2.3.3",
+ "bytes",
+ "lazy_static",
+ "libc",
+ "log",
+ "object",
+ "parking_lot",
+ "thiserror",
  "tokio",
 ]
 
@@ -84,10 +84,10 @@ name = "aya-bpf"
 version = "0.1.0"
 source = "git+https://github.com/aya-rs/aya?rev=5c86b7e#5c86b7ee950762d1cc37fc39c788e670869db231"
 dependencies = [
-    "aya-bpf-bindings",
-    "aya-bpf-cty",
-    "aya-bpf-macros",
-    "rustversion",
+ "aya-bpf-bindings",
+ "aya-bpf-cty",
+ "aya-bpf-macros",
+ "rustversion",
 ]
 
 [[package]]
@@ -95,7 +95,7 @@ name = "aya-bpf-bindings"
 version = "0.1.0"
 source = "git+https://github.com/aya-rs/aya?rev=5c86b7e#5c86b7ee950762d1cc37fc39c788e670869db231"
 dependencies = [
-    "aya-bpf-cty",
+ "aya-bpf-cty",
 ]
 
 [[package]]
@@ -108,9 +108,9 @@ name = "aya-bpf-macros"
 version = "0.1.0"
 source = "git+https://github.com/aya-rs/aya?rev=5c86b7e#5c86b7ee950762d1cc37fc39c788e670869db231"
 dependencies = [
-    "proc-macro2",
-    "quote",
-    "syn 2.0.23",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.23",
 ]
 
 [[package]]
@@ -118,12 +118,12 @@ name = "aya-log"
 version = "0.1.13"
 source = "git+https://github.com/aya-rs/aya?rev=5c86b7e#5c86b7ee950762d1cc37fc39c788e670869db231"
 dependencies = [
-    "aya",
-    "aya-log-common",
-    "bytes",
-    "log",
-    "thiserror",
-    "tokio",
+ "aya",
+ "aya-log-common",
+ "bytes",
+ "log",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]
@@ -131,7 +131,7 @@ name = "aya-log-common"
 version = "0.1.13"
 source = "git+https://github.com/aya-rs/aya?rev=5c86b7e#5c86b7ee950762d1cc37fc39c788e670869db231"
 dependencies = [
-    "num_enum",
+ "num_enum",
 ]
 
 [[package]]
@@ -139,9 +139,9 @@ name = "aya-log-ebpf"
 version = "0.1.0"
 source = "git+https://github.com/aya-rs/aya?rev=5c86b7e#5c86b7ee950762d1cc37fc39c788e670869db231"
 dependencies = [
-    "aya-bpf",
-    "aya-log-common",
-    "aya-log-ebpf-macros",
+ "aya-bpf",
+ "aya-log-common",
+ "aya-log-ebpf-macros",
 ]
 
 [[package]]
@@ -149,11 +149,11 @@ name = "aya-log-ebpf-macros"
 version = "0.1.0"
 source = "git+https://github.com/aya-rs/aya?rev=5c86b7e#5c86b7ee950762d1cc37fc39c788e670869db231"
 dependencies = [
-    "aya-log-common",
-    "aya-log-parser",
-    "proc-macro2",
-    "quote",
-    "syn 2.0.23",
+ "aya-log-common",
+ "aya-log-parser",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.23",
 ]
 
 [[package]]
@@ -161,7 +161,7 @@ name = "aya-log-parser"
 version = "0.1.11-dev.0"
 source = "git+https://github.com/aya-rs/aya?rev=5c86b7e#5c86b7ee950762d1cc37fc39c788e670869db231"
 dependencies = [
-    "aya-log-common",
+ "aya-log-common",
 ]
 
 [[package]]
@@ -169,12 +169,12 @@ name = "aya-obj"
 version = "0.1.0"
 source = "git+https://github.com/aya-rs/aya?rev=5c86b7e#5c86b7ee950762d1cc37fc39c788e670869db231"
 dependencies = [
-    "bytes",
-    "core-error",
-    "hashbrown 0.14.0",
-    "log",
-    "object",
-    "thiserror",
+ "bytes",
+ "core-error",
+ "hashbrown 0.14.0",
+ "log",
+ "object",
+ "thiserror",
 ]
 
 [[package]]
@@ -569,8 +569,8 @@ version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c6201b9ff9fd90a5a3bac2e56a830d0caa509576f0e503818ee82c181b3437a"
 dependencies = [
-    "ahash",
-    "allocator-api2",
+ "ahash",
+ "allocator-api2",
 ]
 
 [[package]]
