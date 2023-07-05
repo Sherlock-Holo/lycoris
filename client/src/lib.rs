@@ -14,7 +14,6 @@ use cidr::{Ipv4Inet, Ipv6Inet};
 use clap::Parser;
 use futures_util::{future, StreamExt};
 use share::helper::Ipv6AddrExt;
-use share::map_name::*;
 use tokio::fs::{self, File};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
@@ -30,6 +29,7 @@ use trust_dns_resolver::AsyncResolver;
 use webpki::TrustAnchor;
 use webpki_roots::TLS_SERVER_ROOTS;
 
+use self::bpf_map_name::*;
 use crate::args::Args;
 use crate::bpf_share::{Ipv4Addr as ShareIpv4Addr, Ipv6Addr as ShareIpv6Addr};
 pub use crate::client::Client;
@@ -43,6 +43,7 @@ pub use crate::token::TokenGenerator;
 
 mod addr;
 mod args;
+mod bpf_map_name;
 pub mod bpf_share;
 mod client;
 mod config;
