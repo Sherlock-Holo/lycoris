@@ -69,14 +69,14 @@ impl BpfListener {
         ];
 
         if let Some(addr) = container_bridge_listen_addr {
-            let tcp_listener = TcpListener::bind(listen_addr)
+            let tcp_listener = TcpListener::bind(addr)
                 .await
                 .tap_err(|err| error!(%err, %addr, "listen container addr tcp4 failed"))?;
 
             listeners.push(TcpListenerAddrStream::from(tcp_listener));
         }
         if let Some(addr) = container_bridge_listen_addr_v6 {
-            let tcp_listener = TcpListener::bind(listen_addr)
+            let tcp_listener = TcpListener::bind(addr)
                 .await
                 .tap_err(|err| error!(%err, %addr, "listen container addr tcp6 failed"))?;
 
