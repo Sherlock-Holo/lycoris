@@ -22,15 +22,12 @@ pub fn handle_cgroup_connect6(ctx: SockAddrContext) -> Result<(), c_long> {
         return Ok(());
     }
 
-    unsafe {
+    let in_container = unsafe {
         let root_netns_cookie = bpf_get_netns_cookie(ptr::null_mut());
         let current_netns_cookie = bpf_get_netns_cookie(ctx.sock_addr as _);
 
-        // ignore docker/podman container, they can't access the proxy client
-        if root_netns_cookie != current_netns_cookie {
-            return Ok(());
-        }
-    }
+        root_netns_cookie != current_netns_cookie
+    };
 
     let user_ipv6 = get_ipv6_segments(sock_addr);
     let user_ipv6_octets = u16_ipv6_to_u8_ipv6(user_ipv6);
@@ -53,7 +50,8 @@ pub fn handle_cgroup_connect6(ctx: SockAddrContext) -> Result<(), c_long> {
         return Ok(());
     }
 
-    let proxy_client: &Ipv6Addr = match PROXY_IPV6_CLIENT.get(0) {
+    let index = if in_container { 1 } else { 0 };
+    let proxy_client: &Ipv6Addr = match PROXY_IPV6_CLIENT.get(index) {
         None => {
             debug!(
                 &ctx,

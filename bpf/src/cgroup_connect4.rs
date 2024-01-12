@@ -21,15 +21,12 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
         return Ok(());
     }
 
-    unsafe {
+    let in_container = unsafe {
         let root_netns_cookie = bpf_get_netns_cookie(ptr::null_mut());
         let current_netns_cookie = bpf_get_netns_cookie(ctx.sock_addr as _);
 
-        // ignore docker/podman container, they can't access the proxy client
-        if root_netns_cookie != current_netns_cookie {
-            return Ok(());
-        }
-    }
+        root_netns_cookie != current_netns_cookie
+    };
 
     let user_ip4_u32 = u32::from_be(sock_addr.user_ip4);
     let user_ip4 = user_ip4_u32.to_be_bytes();
@@ -52,7 +49,8 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
         return Ok(());
     }
 
-    let proxy_client: &Ipv4Addr = match PROXY_IPV4_CLIENT.get(0) {
+    let index = if in_container { 1 } else { 0 };
+    let proxy_client: &Ipv4Addr = match PROXY_IPV4_CLIENT.get(index) {
         None => {
             debug!(
                 &ctx,

@@ -42,8 +42,8 @@ pub const BLACKLIST_MODE: u8 = 0;
 
 /// only has 1 element
 #[map]
-pub static PROXY_IPV4_CLIENT: Array<Ipv4Addr> = Array::with_max_entries(1, 0);
+pub static PROXY_IPV4_CLIENT: Array<Ipv4Addr> = Array::with_max_entries(2, 0);
 
 /// only has 1 element
 #[map]
-pub static PROXY_IPV6_CLIENT: Array<Ipv6Addr> = Array::with_max_entries(1, 0);
+pub static PROXY_IPV6_CLIENT: Array<Ipv6Addr> = Array::with_max_entries(2, 0);
