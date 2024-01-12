@@ -1,7 +1,5 @@
 use totp_rs::{Algorithm, TOTP};
 
-use crate::err::Error;
-
 #[derive(Debug)]
 pub struct TokenGenerator {
     totp: TOTP,
@@ -11,7 +9,7 @@ impl TokenGenerator {
     pub fn new(
         token_secret: String,
         account_name: impl Into<Option<String>>,
-    ) -> Result<Self, Error> {
+    ) -> anyhow::Result<Self> {
         Ok(Self {
             totp: TOTP::new(
                 Algorithm::SHA512,
