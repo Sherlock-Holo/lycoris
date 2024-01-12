@@ -20,7 +20,7 @@ use http::{HeaderMap, Response};
 use lycoris_client::bpf_map_name::*;
 use lycoris_client::bpf_share::{Ipv4Addr, Ipv6Addr};
 use lycoris_client::{BpfListener, Client, HyperConnector, OwnedLink, TokenGenerator};
-use nix::unistd::getuid;
+use rustix::process::getuid;
 use share::helper::Ipv6AddrExt;
 use tokio::fs;
 use tokio::fs::File;

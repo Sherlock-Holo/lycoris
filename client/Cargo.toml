@@ -3,6 +3,7 @@ name = "lycoris-client"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
+rust-version = "1.75"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -48,10 +49,10 @@ clap = { version = "4", features = ["derive", "color", "suggestions"] }
 
 # ip addr
 cidr = "0.2"
-trust-dns-resolver = "0.23"
+hickory-resolver = "0.24"
 
 share = { path = "../share" }
 
 [dev-dependencies]
-nix = "0.26"
+rustix = { version = "0.38", features = ["process"] }
 h2 = { version = "0.3", features = ["stream"] }

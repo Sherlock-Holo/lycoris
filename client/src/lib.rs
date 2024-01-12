@@ -13,6 +13,8 @@ use aya_log::BpfLogger;
 use cidr::{Ipv4Inet, Ipv6Inet};
 use clap::Parser;
 use futures_util::{future, StreamExt};
+use hickory_resolver::error::ResolveErrorKind;
+use hickory_resolver::AsyncResolver;
 use share::helper::Ipv6AddrExt;
 use tokio::fs::{self, File};
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -24,8 +26,6 @@ use tracing_log::LogTracer;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{fmt, Registry};
-use trust_dns_resolver::error::ResolveErrorKind;
-use trust_dns_resolver::AsyncResolver;
 use webpki_roots::TLS_SERVER_ROOTS;
 
 use self::bpf_map_name::*;
