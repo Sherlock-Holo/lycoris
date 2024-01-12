@@ -12,9 +12,8 @@ use lycoris_server::{Auth, HyperServer};
 use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
-use tokio_rustls::rustls::{
-    Certificate, ClientConfig, OwnedTrustAnchor, PrivateKey, RootCertStore, ServerConfig,
-};
+use tokio_rustls::rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
+use tokio_rustls::rustls::{ClientConfig, RootCertStore, ServerConfig};
 use tokio_rustls::TlsAcceptor;
 use totp_rs::{Algorithm, TOTP};
 use tracing::level_filters::LevelFilter;
@@ -22,7 +21,6 @@ use tracing::{debug, subscriber};
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{fmt, Registry};
-use webpki::TrustAnchor;
 
 #[tokio::test]
 async fn main() {
@@ -36,9 +34,8 @@ async fn main() {
     let mut keys = load_keys(Path::new("tests/server.key")).await;
     let certs = load_certs(Path::new("tests/server.cert")).await;
     let server_config = ServerConfig::builder()
-        .with_safe_defaults()
         .with_no_client_auth()
-        .with_single_cert(certs, keys.remove(0))
+        .with_single_cert(certs, keys.remove(0).into())
         .unwrap();
     let client_config = create_client_config().await;
 
@@ -122,39 +119,31 @@ async fn main() {
     assert!(recv_stream.next().await.is_none());
 }
 
-async fn load_certs(path: &Path) -> Vec<Certificate> {
+async fn load_certs(path: &Path) -> Vec<CertificateDer> {
     let certs = fs::read(path).await.unwrap();
-    let mut certs = rustls_pemfile::certs(&mut certs.as_slice()).unwrap();
 
-    certs.drain(..).map(Certificate).collect()
+    rustls_pemfile::certs(&mut certs.as_slice())
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
 }
 
-async fn load_keys(path: &Path) -> Vec<PrivateKey> {
+async fn load_keys(path: &Path) -> Vec<PrivatePkcs8KeyDer> {
     let keys = fs::read(path).await.unwrap();
-    let mut keys = rustls_pemfile::pkcs8_private_keys(&mut keys.as_slice()).unwrap();
 
-    keys.drain(..).map(PrivateKey).collect()
+    rustls_pemfile::pkcs8_private_keys(&mut keys.as_slice())
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
 }
 
 async fn create_client_config() -> ClientConfig {
     let mut root_cert_store = RootCertStore::empty();
     let ca_certs = fs::read("tests/ca.cert").await.unwrap();
-    let ca_certs = rustls_pemfile::certs(&mut ca_certs.as_slice()).unwrap();
 
-    let trust_anchors = ca_certs.iter().map(|cert| {
-        let trust_anchor = TrustAnchor::try_from_cert_der(cert).unwrap();
-
-        OwnedTrustAnchor::from_subject_spki_name_constraints(
-            trust_anchor.subject,
-            trust_anchor.spki,
-            trust_anchor.name_constraints,
-        )
-    });
-
-    root_cert_store.add_server_trust_anchors(trust_anchors);
+    for ca_cert in rustls_pemfile::certs(&mut ca_certs.as_slice()) {
+        root_cert_store.add(ca_cert.unwrap()).unwrap();
+    }
 
     ClientConfig::builder()
-        .with_safe_defaults()
         .with_root_certificates(root_cert_store)
         .with_no_client_auth()
 }

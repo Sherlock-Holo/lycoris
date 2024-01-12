@@ -15,8 +15,4 @@ pub struct Args {
     /// debug log
     #[clap(short, long, action)]
     pub debug: bool,
-
-    /// socks proxy addr, when set, disable bpf mode
-    #[clap(long)]
-    pub socks_listen: Option<String>,
 }

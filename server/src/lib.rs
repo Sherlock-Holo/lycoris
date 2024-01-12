@@ -6,7 +6,8 @@ use args::Args;
 use clap::Parser;
 use tokio::fs;
 use tokio::net::TcpListener;
-use tokio_rustls::rustls::{Certificate, PrivateKey, ServerConfig};
+use tokio_rustls::rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
+use tokio_rustls::rustls::ServerConfig;
 use tokio_rustls::TlsAcceptor;
 use tracing::level_filters::LevelFilter;
 use tracing::{info, subscriber};
@@ -40,9 +41,8 @@ pub async fn run() -> Result<(), Error> {
     let certs = load_certs(&config.cert).await?;
     let mut keys = load_keys(&config.key).await?;
     let server_config = ServerConfig::builder()
-        .with_safe_defaults()
         .with_no_client_auth()
-        .with_single_cert(certs, keys.remove(0))?;
+        .with_single_cert(certs, keys.remove(0).into())?;
 
     let tls_acceptor = TlsAcceptor::from(Arc::new(server_config));
     let tcp_listener = TcpListener::bind(config.listen_addr).await?;
@@ -56,20 +56,16 @@ pub async fn run() -> Result<(), Error> {
     server.start().await
 }
 
-async fn load_certs(path: &Path) -> Result<Vec<Certificate>, Error> {
+async fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>, Error> {
     let certs = fs::read(path).await?;
-    let mut certs =
-        rustls_pemfile::certs(&mut certs.as_slice()).map_err(|err| Error::Other(err.into()))?;
 
-    Ok(certs.drain(..).map(Certificate).collect())
+    Ok(rustls_pemfile::certs(&mut certs.as_slice()).collect::<Result<Vec<_>, _>>()?)
 }
 
-async fn load_keys(path: &Path) -> Result<Vec<PrivateKey>, Error> {
+async fn load_keys(path: &Path) -> Result<Vec<PrivatePkcs8KeyDer<'static>>, Error> {
     let keys = fs::read(path).await?;
-    let mut keys = rustls_pemfile::pkcs8_private_keys(&mut keys.as_slice())
-        .map_err(|err| Error::Other(err.into()))?;
 
-    Ok(keys.drain(..).map(PrivateKey).collect())
+    Ok(rustls_pemfile::pkcs8_private_keys(&mut keys.as_slice()).collect::<Result<Vec<_>, _>>()?)
 }
 
 fn init_log(debug: bool) {

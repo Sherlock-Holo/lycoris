@@ -1,8 +1,6 @@
-use std::io;
-use std::io::ErrorKind;
 use std::sync::Arc;
 
-use async_trait::async_trait;
+use anyhow::Context;
 use bytes::Bytes;
 use http::{Request, StatusCode, Uri, Version};
 use hyper::client::HttpConnector;
@@ -20,7 +18,7 @@ use tracing::{error, info, instrument};
 
 use super::Connect;
 use crate::addr::domain_or_socket_addr::DomainOrSocketAddr;
-use crate::{addr, Error, TokenGenerator};
+use crate::{addr, TokenGenerator};
 
 #[derive(Debug, Clone)]
 pub struct HyperConnector {
@@ -42,7 +40,7 @@ impl HyperConnector {
         remote_port: u16,
         token_generator: TokenGenerator,
         token_header: &str,
-    ) -> Result<Self, Error> {
+    ) -> anyhow::Result<Self> {
         let https_connector = HttpsConnectorBuilder::new()
             .with_tls_config(client_config)
             .https_only()
@@ -62,8 +60,7 @@ impl HyperConnector {
         Ok(Self {
             inner: Arc::new(HyperConnectorInner {
                 client,
-                remote_addr: Uri::try_from(format!("https://{}:{}", remote_domain, remote_port))
-                    .map_err(|err| Error::Other(err.into()))?,
+                remote_addr: Uri::try_from(format!("https://{}:{}", remote_domain, remote_port))?,
                 token_generator,
                 token_header: token_header.to_string(),
             }),
@@ -71,16 +68,15 @@ impl HyperConnector {
     }
 }
 
-#[async_trait]
 impl Connect for HyperConnector {
     type Read = StreamReader<BodyStream, Bytes>;
     type Write = SinkWriter<SinkBodySender>;
 
-    #[instrument(err)]
+    #[instrument(err(Debug))]
     async fn connect(
         &self,
         remote_addr: DomainOrSocketAddr,
-    ) -> Result<(Self::Read, Self::Write), Error> {
+    ) -> anyhow::Result<(Self::Read, Self::Write)> {
         let token = self.inner.token_generator.generate_token();
         let remote_addr_data = addr::encode_addr(remote_addr);
 
@@ -88,7 +84,7 @@ impl Connect for HyperConnector {
         if sender.try_send_data(remote_addr_data).is_err() {
             error!("send remote addr data failed");
 
-            return Err(Error::Other("send remote addr data failed".into()));
+            return Err(anyhow::anyhow!("send remote addr data failed"));
         }
 
         let writer = SinkWriter::new(SinkBodySender::new(sender));
@@ -98,11 +94,7 @@ impl Connect for HyperConnector {
             .uri(self.inner.remote_addr.clone())
             .header(&self.inner.token_header, token)
             .body(body)
-            .map_err(|err| {
-                error!(%err, "build h2 request failed");
-
-                Error::Other(err.into())
-            })?;
+            .with_context(|| "build h2 request failed")?;
 
         let response = self
             .inner
@@ -117,10 +109,7 @@ impl Connect for HyperConnector {
             let status_code = response.status();
             error!(%status_code, "status code is not 200");
 
-            return Err(Error::Io(io::Error::new(
-                ErrorKind::Other,
-                format!("status {} is not 200", status_code),
-            )));
+            return Err(anyhow::anyhow!("status {status_code} is not 200"));
         }
 
         info!("get h2 stream done");

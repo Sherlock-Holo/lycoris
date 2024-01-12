@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use hyper::upgrade::Upgraded;
 use tokio::io;
 use tokio::io::{AsyncRead, AsyncWrite, BufStream, ReadHalf, WriteHalf};
@@ -6,17 +5,14 @@ use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::TcpStream;
 
 use crate::addr::domain_or_socket_addr::DomainOrSocketAddr;
-use crate::Error;
 
 pub mod bpf;
-pub mod http;
-pub mod socks;
 
-#[async_trait]
-pub trait Listener {
+#[trait_variant::make(Listener: Send)]
+pub trait LocalListener {
     type Stream: Split;
 
-    async fn accept(&mut self) -> Result<(Self::Stream, DomainOrSocketAddr), Error>;
+    async fn accept(&mut self) -> anyhow::Result<(Self::Stream, DomainOrSocketAddr)>;
 }
 
 pub trait Split {

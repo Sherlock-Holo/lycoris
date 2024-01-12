@@ -11,4 +11,4 @@ aya-bpf = { git = "https://github.com/aya-rs/aya", rev = "5c86b7e" }
 aya-log-ebpf = { git = "https://github.com/aya-rs/aya", rev = "5c86b7e" }
 
 [build-dependencies]
-bindgen = "0.65"
+bindgen = "0.69"

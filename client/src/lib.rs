@@ -13,10 +13,12 @@ use aya_log::BpfLogger;
 use cidr::{Ipv4Inet, Ipv6Inet};
 use clap::Parser;
 use futures_util::{future, StreamExt};
+use hickory_resolver::error::ResolveErrorKind;
+use hickory_resolver::AsyncResolver;
 use share::helper::Ipv6AddrExt;
 use tokio::fs::{self, File};
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
+use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tokio_stream::wrappers::LinesStream;
 use tracing::level_filters::LevelFilter;
 use tracing::{info, subscriber, warn};
@@ -24,9 +26,6 @@ use tracing_log::LogTracer;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{fmt, Registry};
-use trust_dns_resolver::error::ResolveErrorKind;
-use trust_dns_resolver::AsyncResolver;
-use webpki::TrustAnchor;
 use webpki_roots::TLS_SERVER_ROOTS;
 
 use self::bpf_map_name::*;
@@ -35,25 +34,22 @@ use crate::bpf_share::{Ipv4Addr as ShareIpv4Addr, Ipv6Addr as ShareIpv6Addr};
 pub use crate::client::Client;
 use crate::config::Config;
 pub use crate::connect::hyper::HyperConnector;
-pub use crate::err::Error;
 pub use crate::listener::bpf::BpfListener;
-use crate::listener::socks::SocksListener;
 pub use crate::owned_link::OwnedLink;
 pub use crate::token::TokenGenerator;
 
 mod addr;
 mod args;
-mod bpf_map_name;
+pub mod bpf_map_name;
 pub mod bpf_share;
 mod client;
 mod config;
 mod connect;
-mod err;
 mod listener;
 mod owned_link;
 mod token;
 
-pub async fn run() -> Result<(), Error> {
+pub async fn run() -> anyhow::Result<()> {
     let args = Args::parse();
 
     init_log(args.debug);
@@ -63,13 +59,10 @@ pub async fn run() -> Result<(), Error> {
 
     info!(?config, "load config done");
 
-    match &args.socks_listen {
-        None => run_bpf(args, config).await,
-        Some(http_listen) => run_socks(http_listen, config).await,
-    }
+    run_bpf(args, config).await
 }
 
-async fn run_bpf(args: Args, config: Config) -> Result<(), Error> {
+async fn run_bpf(args: Args, config: Config) -> anyhow::Result<()> {
     let remote_domain_ips = get_remote_domain_ips(&config.remote_domain).await?;
 
     info!(?remote_domain_ips, "get remote domain ip done");
@@ -78,7 +71,13 @@ async fn run_bpf(args: Args, config: Config) -> Result<(), Error> {
 
     init_bpf_log(&mut bpf);
 
-    set_proxy_addr(&mut bpf, config.listen_addr, config.listen_addr_v6)?;
+    set_proxy_addr(
+        &mut bpf,
+        config.listen_addr,
+        config.listen_addr_v6,
+        config.container_bridge_listen_addr,
+        config.container_bridge_listen_addr_v6,
+    )?;
 
     info!(listen_addr = %config.listen_addr, "set proxy addr done");
 
@@ -119,7 +118,14 @@ async fn run_bpf(args: Args, config: Config) -> Result<(), Error> {
 
     info!("load sockops done");
 
-    let bpf_listener = load_listener(&mut bpf, config.listen_addr, config.listen_addr_v6).await?;
+    let bpf_listener = load_listener(
+        &mut bpf,
+        config.listen_addr,
+        config.listen_addr_v6,
+        config.container_bridge_listen_addr,
+        config.container_bridge_listen_addr_v6,
+    )
+    .await?;
 
     info!("load listener done");
 
@@ -139,35 +145,10 @@ async fn run_bpf(args: Args, config: Config) -> Result<(), Error> {
     client.start().await
 }
 
-async fn run_socks(http_listen: &str, config: Config) -> Result<(), Error> {
-    let http_listen = http_listen
-        .parse()
-        .map_err(|err| Error::Other(Box::new(err)))?;
-
-    let http_listener = SocksListener::new(http_listen).await?;
-
-    info!("create http listener done");
-
-    let connector = load_connector(
-        &config.remote_domain,
-        config.remote_port.unwrap_or(443),
-        config.ca_cert.as_deref(),
-        &config.token_secret,
-        &config.token_header,
-    )
-    .await?;
-
-    info!("load connector done");
-
-    let mut client = Client::new(connector, http_listener);
-
-    client.start().await
-}
-
 async fn load_connect4(
     bpf: &mut Bpf,
     cgroup_path: &Path,
-) -> Result<OwnedLink<CgroupSockAddrLink>, Error> {
+) -> anyhow::Result<OwnedLink<CgroupSockAddrLink>> {
     let cgroup_file = File::open(cgroup_path).await?;
 
     let connect4_prog: &mut CgroupSockAddr = bpf
@@ -189,7 +170,7 @@ async fn load_connect4(
 async fn load_connect6(
     bpf: &mut Bpf,
     cgroup_path: &Path,
-) -> Result<OwnedLink<CgroupSockAddrLink>, Error> {
+) -> anyhow::Result<OwnedLink<CgroupSockAddrLink>> {
     let cgroup_file = File::open(cgroup_path).await?;
 
     let connect6_prog: &mut CgroupSockAddr = bpf
@@ -212,7 +193,7 @@ async fn load_connect6(
 async fn load_established_sockops(
     bpf: &mut Bpf,
     cgroup_path: &Path,
-) -> Result<Box<dyn Any>, Error> {
+) -> anyhow::Result<Box<dyn Any>> {
     let cgroup_file = File::open(cgroup_path).await?;
 
     let prog: &mut SockOps = bpf
@@ -235,7 +216,9 @@ fn set_proxy_addr(
     bpf: &mut Bpf,
     mut addr: SocketAddrV4,
     mut addr_v6: SocketAddrV6,
-) -> Result<(), Error> {
+    container_bridge_listen_addr: Option<SocketAddrV4>,
+    container_bridge_listen_addr_v6: Option<SocketAddrV6>,
+) -> anyhow::Result<()> {
     let mut v4_proxy_server: Array<_, ShareIpv4Addr> = bpf
         .map_mut(PROXY_IPV4_CLIENT)
         .expect("PROXY_IPV4_CLIENT bpf array not found")
@@ -254,6 +237,16 @@ fn set_proxy_addr(
 
     v4_proxy_server.set(0, proxy_addr, 0)?;
 
+    if let Some(addr) = container_bridge_listen_addr {
+        let proxy_addr = ShareIpv4Addr {
+            addr: addr.ip().octets(),
+            port: addr.port(),
+            _padding: [0; 2],
+        };
+
+        v4_proxy_server.set(1, proxy_addr, 0)?;
+    }
+
     let mut v6_proxy_server: Array<_, ShareIpv6Addr> = bpf
         .map_mut(PROXY_IPV6_CLIENT)
         .expect("PROXY_IPV6_CLIENT bpf array not found")
@@ -266,10 +259,19 @@ fn set_proxy_addr(
 
     let proxy_addr = ShareIpv6Addr {
         addr: addr_v6.ip().network_order_segments(),
-        port: addr.port(),
+        port: addr_v6.port(),
     };
 
     v6_proxy_server.set(0, proxy_addr, 0)?;
+
+    if let Some(addr_v6) = container_bridge_listen_addr_v6 {
+        let proxy_addr = ShareIpv6Addr {
+            addr: addr_v6.ip().network_order_segments(),
+            port: addr_v6.port(),
+        };
+
+        v6_proxy_server.set(0, proxy_addr, 0)?;
+    }
 
     Ok(())
 }
@@ -278,7 +280,9 @@ async fn load_listener(
     bpf: &mut Bpf,
     listen_addr: SocketAddrV4,
     listen_addr_v6: SocketAddrV6,
-) -> Result<BpfListener, Error> {
+    container_bridge_listen_addr: Option<SocketAddrV4>,
+    container_bridge_listen_addr_v6: Option<SocketAddrV6>,
+) -> anyhow::Result<BpfListener> {
     let ipv4_map_ref_mut = bpf
         .take_map(IPV4_ADDR_MAP)
         .expect("IPV4_ADDR_MAP bpf lru map not found");
@@ -290,6 +294,8 @@ async fn load_listener(
     BpfListener::new(
         listen_addr,
         listen_addr_v6,
+        container_bridge_listen_addr,
+        container_bridge_listen_addr_v6,
         ipv4_map_ref_mut,
         ipv6_map_ref_mut,
     )
@@ -302,39 +308,20 @@ async fn load_connector(
     ca_cert: Option<&Path>,
     token_secret: &str,
     token_header: &str,
-) -> Result<HyperConnector, Error> {
+) -> anyhow::Result<HyperConnector> {
     let mut root_cert_store = RootCertStore::empty();
-    root_cert_store.add_server_trust_anchors(TLS_SERVER_ROOTS.0.iter().map(|ta| {
-        OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
-        )
-    }));
+    root_cert_store.extend(TLS_SERVER_ROOTS.iter().cloned());
 
     if let Some(ca_cert) = ca_cert {
         let ca_cert = fs::read(ca_cert).await?;
-        let ca_certs = rustls_pemfile::certs(&mut ca_cert.as_slice())?;
 
-        let ca_certs = ca_certs
-            .iter()
-            .map(|cert| {
-                let ta =
-                    TrustAnchor::try_from_cert_der(cert).map_err(|err| Error::Other(err.into()))?;
-
-                Ok::<_, Error>(OwnedTrustAnchor::from_subject_spki_name_constraints(
-                    ta.subject,
-                    ta.spki,
-                    ta.name_constraints,
-                ))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        root_cert_store.add_server_trust_anchors(ca_certs.into_iter());
+        for cert in rustls_pemfile::certs(&mut ca_cert.as_slice()) {
+            let cert = cert?;
+            root_cert_store.add_parsable_certificates([cert]);
+        }
     }
 
     let client_config = ClientConfig::builder()
-        .with_safe_defaults()
         .with_root_certificates(root_cert_store)
         .with_no_client_auth();
     let token_generator = TokenGenerator::new(token_secret.to_string(), None)?;
@@ -351,7 +338,7 @@ async fn load_connector(
 async fn set_proxy_ip_list<'a, I: Iterator<Item = &'a Path>>(
     bpf: &mut Bpf,
     ip_list_paths: I,
-) -> Result<(), Error> {
+) -> anyhow::Result<()> {
     for ip_list_path in ip_list_paths {
         let ip_list = File::open(ip_list_path).await?;
         let mut reader = LinesStream::new(BufReader::new(ip_list).lines());
@@ -415,7 +402,7 @@ async fn set_proxy_ip_list<'a, I: Iterator<Item = &'a Path>>(
     Ok(())
 }
 
-fn append_remote_ip_list(bpf: &mut Bpf, remote_domain_ip: &[IpAddr]) -> Result<(), Error> {
+fn append_remote_ip_list(bpf: &mut Bpf, remote_domain_ip: &[IpAddr]) -> anyhow::Result<()> {
     let mut proxy_ipv4_list: LpmTrie<_, [u8; 4], u8> = bpf
         .map_mut(PROXY_IPV4_LIST)
         .expect("PROXY_IPV4_LIST not found")
@@ -434,7 +421,7 @@ fn append_remote_ip_list(bpf: &mut Bpf, remote_domain_ip: &[IpAddr]) -> Result<(
     Ok(())
 }
 
-fn set_proxy_ip_list_mode(bpf: &mut Bpf, blacklist_mode: bool) -> Result<(), Error> {
+fn set_proxy_ip_list_mode(bpf: &mut Bpf, blacklist_mode: bool) -> anyhow::Result<()> {
     let mut proxy_ipv4_list_mode: Array<_, u8> = bpf
         .map_mut(PROXY_IPV4_LIST_MODE)
         .expect("PROXY_IPV4_LIST_MODE not found")
@@ -447,7 +434,7 @@ fn set_proxy_ip_list_mode(bpf: &mut Bpf, blacklist_mode: bool) -> Result<(), Err
     Ok(())
 }
 
-async fn get_remote_domain_ips(domain: &str) -> Result<Vec<IpAddr>, Error> {
+async fn get_remote_domain_ips(domain: &str) -> anyhow::Result<Vec<IpAddr>> {
     if let Ok(ip_addr) = IpAddr::from_str(domain) {
         return Ok(vec![ip_addr]);
     }
@@ -458,7 +445,7 @@ async fn get_remote_domain_ips(domain: &str) -> Result<Vec<IpAddr>, Error> {
         match async_resolver.ipv4_lookup(domain).await {
             Err(err) if matches!(err.kind(), &ResolveErrorKind::NoRecordsFound { .. }) => Ok(None),
 
-            Err(err) => Err(Error::from(err)),
+            Err(err) => Err(anyhow::Error::from(err)),
 
             Ok(ipv4lookup) => Ok(Some(ipv4lookup)),
         }
@@ -468,7 +455,7 @@ async fn get_remote_domain_ips(domain: &str) -> Result<Vec<IpAddr>, Error> {
         match async_resolver.ipv6_lookup(domain).await {
             Err(err) if matches!(err.kind(), &ResolveErrorKind::NoRecordsFound { .. }) => Ok(None),
 
-            Err(err) => Err(Error::from(err)),
+            Err(err) => Err(err.into()),
 
             Ok(ipv6lookup) => Ok(Some(ipv6lookup)),
         }
@@ -479,8 +466,13 @@ async fn get_remote_domain_ips(domain: &str) -> Result<Vec<IpAddr>, Error> {
     Ok(ipv4_lookup
         .into_iter()
         .flatten()
-        .map(IpAddr::from)
-        .chain(ipv6_lookup.into_iter().flatten().map(IpAddr::from))
+        .map(|record| IpAddr::from(record.0))
+        .chain(
+            ipv6_lookup
+                .into_iter()
+                .flatten()
+                .map(|record| IpAddr::from(record.0)),
+        )
         .collect())
 }
 

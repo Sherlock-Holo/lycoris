@@ -3,11 +3,12 @@ name = "lycoris-client"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
+rust-version = "1.75"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-thiserror = "1"
+anyhow = "1"
 bytes = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "fs", "sync", "time"] }
 tap = "1"
@@ -17,10 +18,7 @@ tokio-stream = { version = "0.1", features = ["time", "io-util", "net"] }
 tokio-util = { version = "0.7", features = ["io"] }
 futures-util = { version = "0.3", features = ["io"] }
 futures-channel = { version = "0.3", features = ["sink"] }
-async-trait = "0.1"
-
-# http proxy
-http-body = "0.4"
+trait-variant = "0.1"
 
 # log
 tracing = "0.1"
@@ -29,7 +27,7 @@ tracing-subscriber = "0.3"
 # bpf
 aya = { git = "https://github.com/aya-rs/aya", rev = "5c86b7e", features = ["async_tokio"] }
 aya-log = { git = "https://github.com/aya-rs/aya", rev = "5c86b7e" }
-tracing-log = "0.1"
+tracing-log = "0.2"
 
 # auth
 totp-rs = { version = "5", features = ["otpauth"] }
@@ -37,25 +35,24 @@ totp-rs = { version = "5", features = ["otpauth"] }
 # http/2
 http = "0.2"
 hyper = { version = "0.14", features = ["server", "runtime", "http1", "http2", "stream"] }
-hyper-rustls = { version = "0.24", features = ["http2", "logging"] }
+hyper-rustls = { version = "0.25", features = ["http2", "logging"] }
 
 # tls
-tokio-rustls = "0.24"
-rustls-pemfile = "1"
-webpki-roots = "0.23"
-webpki = { version = "0.22", features = ["std"] }
+tokio-rustls = "0.25"
+rustls-pemfile = "2"
+webpki-roots = "0.26"
 
 # config and args
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
-clap = { version = "3", features = ["derive", "color", "suggestions"] }
+clap = { version = "4", features = ["derive", "color", "suggestions"] }
 
 # ip addr
 cidr = "0.2"
-trust-dns-resolver = "0.22"
+hickory-resolver = "0.24"
 
 share = { path = "../share" }
 
 [dev-dependencies]
-nix = "0.26"
+rustix = { version = "0.38", features = ["process"] }
 h2 = { version = "0.3", features = ["stream"] }

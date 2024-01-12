@@ -12,7 +12,6 @@ use tracing::error;
 use crate::bpf_share::{
     ConnectedIpv4Addr, ConnectedIpv6Addr, Ipv4Addr as ShareIpv4Addr, Ipv6Addr as ShareIpv6Addr,
 };
-use crate::err::Error;
 
 pub trait LimitedBpfHashMap<K: Pod, V: Pod> {
     fn get(&self, key: &K) -> Result<V, MapError>;
@@ -47,7 +46,7 @@ impl<Map: LimitedBpfHashMap<ConnectedIpv4Addr, ShareIpv4Addr>> DstAddrLookup<Map
         &self,
         connected_addr: &ConnectedIpv4Addr,
         max_retry: usize,
-    ) -> Result<Option<SocketAddr>, Error> {
+    ) -> anyhow::Result<Option<SocketAddr>> {
         for _ in 0..max_retry {
             let mut map = self.dst_addr_map.lock().await;
             match map.get(connected_addr) {
@@ -89,7 +88,7 @@ impl<Map: LimitedBpfHashMap<ConnectedIpv6Addr, ShareIpv6Addr>> DstAddrLookup<Map
         &self,
         connected_addr: &ConnectedIpv6Addr,
         max_retry: usize,
-    ) -> Result<Option<SocketAddr>, Error> {
+    ) -> anyhow::Result<Option<SocketAddr>> {
         for _ in 0..max_retry {
             let mut map = self.dst_addr_map.lock().await;
             match map.get(connected_addr) {

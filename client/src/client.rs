@@ -1,14 +1,13 @@
-use std::io::{self, ErrorKind};
 use std::sync::Arc;
 use std::time::Duration;
 
+use anyhow::Context;
 use share::proxy;
 use tokio::time;
-use tracing::{error, info, instrument};
+use tracing::{info, instrument};
 
 use crate::addr::domain_or_socket_addr::DomainOrSocketAddr;
 use crate::connect::Connect;
-use crate::err::Error;
 use crate::listener::{Listener, Split};
 
 pub struct Client<C, L> {
@@ -31,7 +30,7 @@ where
     L: Listener + Send,
     L::Stream: Send + 'static,
 {
-    pub async fn start(&mut self) -> Result<(), Error> {
+    pub async fn start(&mut self) -> anyhow::Result<()> {
         loop {
             let (tcp_stream, addr) = if let Ok(result) = self.listener.accept().await {
                 result
@@ -48,23 +47,17 @@ where
     }
 }
 
-#[instrument(skip(connector, tcp_stream), err)]
+#[instrument(skip(connector, tcp_stream), err(Debug))]
 async fn handle_proxy<C: Connect, S: Split + 'static>(
     connector: Arc<C>,
     addr: DomainOrSocketAddr,
     tcp_stream: S,
-) -> Result<(), Error> {
+) -> anyhow::Result<()> {
     const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
-    let (read, write) = match time::timeout(CONNECT_TIMEOUT, connector.connect(addr)).await {
-        Err(err) => {
-            error!(%err, "connect timeout");
-
-            return Err(Error::Io(io::Error::new(ErrorKind::TimedOut, err)));
-        }
-
-        Ok(result) => result?,
-    };
+    let (read, write) = time::timeout(CONNECT_TIMEOUT, connector.connect(addr))
+        .await
+        .with_context(|| "connect timeout")??;
 
     info!("connect done");
 
@@ -72,5 +65,5 @@ async fn handle_proxy<C: Connect, S: Split + 'static>(
 
     proxy::proxy(read, write, tcp_read, tcp_write).await?;
 
-    Ok::<_, Error>(())
+    Ok(())
 }
