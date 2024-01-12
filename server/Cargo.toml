@@ -26,17 +26,16 @@ http = "0.2"
 hyper = { version = "0.14", features = ["runtime", "http2", "http1", "server", "stream"] }
 
 # tls
-tokio-rustls = "0.24"
-rustls-pemfile = "1"
+tokio-rustls = "0.25"
+rustls-pemfile = "2"
 
 # config and args
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
-clap = { version = "3", features = ["derive", "color", "suggestions"] }
+clap = { version = "4", features = ["derive", "color", "suggestions"] }
 
 share = { path = "../share" }
 
 [dev-dependencies]
-webpki = { version = "0.22", features = ["std"] }
-hyper-rustls = { version = "0.24", features = ["http2", "logging"] }
+hyper-rustls = { version = "0.25", features = ["http2", "logging"] }
 hyper = { version = "0.14", features = ["client"] }
