@@ -64,6 +64,12 @@ pub fn handle_cgroup_connect6(ctx: SockAddrContext) -> Result<(), c_long> {
         Some(proxy_server) => proxy_server,
     };
 
+    if in_container && proxy_client.addr == [0; 8] {
+        debug!(&ctx, "container bridge listen addr v6 not set, ignore it");
+
+        return Ok(());
+    }
+
     if user_ipv6 == proxy_client.addr {
         debug!(
             &ctx,

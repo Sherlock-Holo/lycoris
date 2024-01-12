@@ -63,6 +63,12 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
         Some(proxy_server) => proxy_server,
     };
 
+    if in_container && proxy_client.addr == [0; 4] {
+        debug!(&ctx, "container bridge listen addr not set, ignore it");
+
+        return Ok(());
+    }
+
     if user_ip4 == proxy_client.addr {
         debug!(
             &ctx,
