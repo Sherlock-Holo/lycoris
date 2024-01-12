@@ -34,13 +34,12 @@ totp-rs = { version = "5", features = ["otpauth"] }
 # http/2
 http = "0.2"
 hyper = { version = "0.14", features = ["server", "runtime", "http1", "http2", "stream"] }
-hyper-rustls = { version = "0.24", features = ["http2", "logging"] }
+hyper-rustls = { version = "0.25", features = ["http2", "logging"] }
 
 # tls
-tokio-rustls = "0.24"
-rustls-pemfile = "1"
-webpki-roots = "0.23"
-webpki = { version = "0.22", features = ["std"] }
+tokio-rustls = "0.25"
+rustls-pemfile = "2"
+webpki-roots = "0.26"
 
 # config and args
 serde = { version = "1", features = ["derive"] }

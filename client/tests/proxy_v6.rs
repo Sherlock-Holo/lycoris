@@ -17,18 +17,17 @@ use cidr::Ipv6Inet;
 use futures_util::StreamExt;
 use h2::server;
 use http::{HeaderMap, Response};
+use lycoris_client::bpf_map_name::*;
 use lycoris_client::bpf_share::{Ipv4Addr, Ipv6Addr};
-use lycoris_client::{BpfListener, Client, Connector, OwnedLink, TokenGenerator};
+use lycoris_client::{BpfListener, Client, HyperConnector, OwnedLink, TokenGenerator};
 use nix::unistd::getuid;
 use share::helper::Ipv6AddrExt;
-use share::map_name::*;
 use tokio::fs;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio::net::{TcpListener, TcpStream};
-use tokio_rustls::rustls::{
-    Certificate, ClientConfig, OwnedTrustAnchor, PrivateKey, RootCertStore, ServerConfig,
-};
+use tokio_rustls::rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
+use tokio_rustls::rustls::{ClientConfig, RootCertStore, ServerConfig};
 use tokio_rustls::TlsAcceptor;
 use tracing::level_filters::LevelFilter;
 use tracing::{info, subscriber};
@@ -36,7 +35,6 @@ use tracing_log::LogTracer;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{fmt, Registry};
-use webpki::TrustAnchor;
 
 const CGROUP_PATH: &str = "/sys/fs/cgroup";
 const BPF_ELF: &str = "../target/bpfel-unknown-none/release/lycoris-bpf";
@@ -74,7 +72,7 @@ async fn main() {
     init_bpf_log(&mut bpf);
 
     set_proxy_addr(&mut bpf, listen_addr, listen_addr_v6);
-    set_proxy_ip_list_blacklist_mode(&bpf);
+    set_proxy_ip_list_blacklist_mode(&mut bpf);
     load_target_ip(&mut bpf);
 
     let _connect6_link = load_connect6(&mut bpf, Path::new(CGROUP_PATH)).await;
@@ -118,9 +116,8 @@ async fn start_server() -> SocketAddr {
     let mut keys = load_keys(Path::new("tests/server.key")).await;
     let certs = load_certs(Path::new("tests/server.cert")).await;
     let server_config = ServerConfig::builder()
-        .with_safe_defaults()
         .with_no_client_auth()
-        .with_single_cert(certs, keys.remove(0))
+        .with_single_cert(certs, keys.remove(0).into())
         .unwrap();
 
     let listener = TcpListener::bind(H2_SERVER_ADDR_V6).await.unwrap();
@@ -158,18 +155,20 @@ async fn start_server() -> SocketAddr {
     h2_server_addr
 }
 
-async fn load_certs(path: &Path) -> Vec<Certificate> {
+async fn load_certs(path: &Path) -> Vec<CertificateDer> {
     let certs = fs::read(path).await.unwrap();
-    let mut certs = rustls_pemfile::certs(&mut certs.as_slice()).unwrap();
 
-    certs.drain(..).map(Certificate).collect()
+    rustls_pemfile::certs(&mut certs.as_slice())
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
 }
 
-async fn load_keys(path: &Path) -> Vec<PrivateKey> {
+async fn load_keys(path: &Path) -> Vec<PrivatePkcs8KeyDer> {
     let keys = fs::read(path).await.unwrap();
-    let mut keys = rustls_pemfile::pkcs8_private_keys(&mut keys.as_slice()).unwrap();
 
-    keys.drain(..).map(PrivateKey).collect()
+    rustls_pemfile::pkcs8_private_keys(&mut keys.as_slice())
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
 }
 
 async fn load_connector(
@@ -178,38 +177,27 @@ async fn load_connector(
     ca_cert: &Path,
     token_secret: &str,
     token_header: &str,
-) -> Connector {
+) -> HyperConnector {
     let mut root_cert_store = RootCertStore::empty();
 
     let ca_cert = fs::read(ca_cert).await.unwrap();
-    let ca_certs = rustls_pemfile::certs(&mut ca_cert.as_slice()).unwrap();
 
-    let ca_certs = ca_certs.iter().map(|cert| {
-        let ta = TrustAnchor::try_from_cert_der(cert).unwrap();
-
-        OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
-        )
-    });
-
-    root_cert_store.add_server_trust_anchors(ca_certs.into_iter());
+    for ca_certs in rustls_pemfile::certs(&mut ca_cert.as_slice()) {
+        root_cert_store.add_parsable_certificates([ca_certs.unwrap()]);
+    }
 
     let client_config = ClientConfig::builder()
-        .with_safe_defaults()
         .with_root_certificates(root_cert_store)
         .with_no_client_auth();
     let token_generator = TokenGenerator::new(token_secret.to_string(), None).unwrap();
 
-    Connector::new(
+    HyperConnector::new(
         client_config,
         remote_domain,
         remote_port,
         token_generator,
         token_header,
     )
-    .await
     .unwrap()
 }
 
@@ -219,13 +207,13 @@ async fn load_listener(
     listen_addr_v6: SocketAddrV6,
 ) -> BpfListener {
     let ipv4_map = bpf
-        .map_mut(IPV4_ADDR_MAP)
+        .take_map(IPV4_ADDR_MAP)
         .expect("IPV4_ADDR_MAP bpf lru map not found");
     let ipv6_map = bpf
-        .map_mut(IPV6_ADDR_MAP)
+        .take_map(IPV6_ADDR_MAP)
         .expect("IPV6_ADDR_MAP bpf lru map not found");
 
-    BpfListener::new(listen_addr, listen_addr_v6, ipv4_map, ipv6_map)
+    BpfListener::new(listen_addr, listen_addr_v6, None, None, ipv4_map, ipv6_map)
         .await
         .unwrap()
 }
@@ -272,7 +260,7 @@ async fn load_established_sockops(bpf: &mut Bpf, cgroup_path: &Path) -> Box<dyn 
 }
 
 fn load_target_ip(bpf: &mut Bpf) {
-    let proxy_ipv6_list: LpmTrie<_, [u16; 8], u8> = bpf
+    let mut proxy_ipv6_list: LpmTrie<_, [u16; 8], u8> = bpf
         .map_mut(PROXY_IPV6_LIST)
         .expect("PROXY_IPV4_LIST not found")
         .try_into()
@@ -321,7 +309,7 @@ fn set_proxy_addr(bpf: &mut Bpf, addr: SocketAddrV4, addr_v6: SocketAddrV6) {
     v6_proxy_server.set(0, proxy_addr, 0).unwrap();
 }
 
-fn set_proxy_ip_list_blacklist_mode(bpf: &Bpf) {
+fn set_proxy_ip_list_blacklist_mode(bpf: &mut Bpf) {
     let mut proxy_ipv4_list_mode: Array<_, u8> = bpf
         .map_mut(PROXY_IPV4_LIST_MODE)
         .expect("PROXY_IPV4_LIST_MODE not found")

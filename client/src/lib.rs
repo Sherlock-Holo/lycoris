@@ -16,7 +16,7 @@ use futures_util::{future, StreamExt};
 use share::helper::Ipv6AddrExt;
 use tokio::fs::{self, File};
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
+use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tokio_stream::wrappers::LinesStream;
 use tracing::level_filters::LevelFilter;
 use tracing::{info, subscriber, warn};
@@ -26,7 +26,6 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{fmt, Registry};
 use trust_dns_resolver::error::ResolveErrorKind;
 use trust_dns_resolver::AsyncResolver;
-use webpki::TrustAnchor;
 use webpki_roots::TLS_SERVER_ROOTS;
 
 use self::bpf_map_name::*;
@@ -41,7 +40,7 @@ pub use crate::token::TokenGenerator;
 
 mod addr;
 mod args;
-mod bpf_map_name;
+pub mod bpf_map_name;
 pub mod bpf_share;
 mod client;
 mod config;
@@ -311,36 +310,18 @@ async fn load_connector(
     token_header: &str,
 ) -> anyhow::Result<HyperConnector> {
     let mut root_cert_store = RootCertStore::empty();
-    root_cert_store.add_trust_anchors(TLS_SERVER_ROOTS.0.iter().map(|ta| {
-        OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
-        )
-    }));
+    root_cert_store.extend(TLS_SERVER_ROOTS.iter().cloned());
 
     if let Some(ca_cert) = ca_cert {
         let ca_cert = fs::read(ca_cert).await?;
-        let ca_certs = rustls_pemfile::certs(&mut ca_cert.as_slice())?;
 
-        let ca_certs = ca_certs
-            .iter()
-            .map(|cert| {
-                let ta = TrustAnchor::try_from_cert_der(cert)?;
-
-                Ok::<_, anyhow::Error>(OwnedTrustAnchor::from_subject_spki_name_constraints(
-                    ta.subject,
-                    ta.spki,
-                    ta.name_constraints,
-                ))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        root_cert_store.add_trust_anchors(ca_certs.into_iter());
+        for cert in rustls_pemfile::certs(&mut ca_cert.as_slice()) {
+            let cert = cert?;
+            root_cert_store.add_parsable_certificates([cert]);
+        }
     }
 
     let client_config = ClientConfig::builder()
-        .with_safe_defaults()
         .with_root_certificates(root_cert_store)
         .with_no_client_auth();
     let token_generator = TokenGenerator::new(token_secret.to_string(), None)?;
