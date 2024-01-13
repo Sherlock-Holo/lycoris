@@ -1,23 +1,22 @@
-use std::future::Future;
 use std::io;
 use std::io::ErrorKind;
-use std::pin::{pin, Pin};
-use std::task::{Context, Poll};
+use std::pin::Pin;
+use std::task::{ready, Context, Poll};
 
 use bytes::Bytes;
-use futures_util::{Sink, Stream, StreamExt};
+use futures_channel::mpsc::UnboundedSender;
+use futures_util::{Sink, SinkExt, Stream};
 use http::HeaderMap;
-use hyper::body::Sender;
-use hyper::Body;
+use hyper::body::{Body, Frame, Incoming};
 
 #[derive(Debug)]
 pub struct BodyStream {
-    body: Body,
+    body: Incoming,
 }
 
-impl BodyStream {
-    pub fn new(body: Body) -> Self {
-        Self { body }
+impl From<Incoming> for BodyStream {
+    fn from(value: Incoming) -> Self {
+        Self { body: value }
     }
 }
 
@@ -26,28 +25,39 @@ impl Stream for BodyStream {
 
     #[inline]
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        self.body
-            .poll_next_unpin(cx)
-            .map_err(|err| io::Error::new(ErrorKind::Other, err))
+        let result = Pin::new(&mut self.body)
+            .poll_frame(cx)
+            .map_err(|err| io::Error::new(ErrorKind::Other, err))?;
+        match ready!(result) {
+            None => Poll::Ready(None),
+            Some(frame) => match frame.into_data() {
+                Err(_) => Poll::Ready(None),
+                Ok(data) => Poll::Ready(Some(Ok(data))),
+            },
+        }
     }
 }
 
 #[derive(Debug)]
-pub struct SinkBodySender {
-    sender: Sender,
+pub struct SinkBodySender<E> {
+    sender: UnboundedSender<Result<Frame<Bytes>, E>>,
+    is_trailer_sent: bool,
 }
 
-impl SinkBodySender {
-    pub fn new(sender: Sender) -> Self {
-        Self { sender }
+impl<E> From<UnboundedSender<Result<Frame<Bytes>, E>>> for SinkBodySender<E> {
+    fn from(value: UnboundedSender<Result<Frame<Bytes>, E>>) -> Self {
+        Self {
+            sender: value,
+            is_trailer_sent: false,
+        }
     }
 }
 
-impl<'a> Sink<&'a [u8]> for SinkBodySender {
+impl<'a, E> Sink<&'a [u8]> for SinkBodySender<E> {
     type Error = io::Error;
 
     #[inline]
-    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.sender
             .poll_ready(cx)
             .map_err(|err| io::Error::new(ErrorKind::Other, err))
@@ -56,22 +66,29 @@ impl<'a> Sink<&'a [u8]> for SinkBodySender {
     #[inline]
     fn start_send(mut self: Pin<&mut Self>, item: &'a [u8]) -> Result<(), Self::Error> {
         self.sender
-            .try_send_data(Bytes::copy_from_slice(item))
-            .map_err(|_| io::Error::new(ErrorKind::Other, "sender not ready"))
+            .start_send_unpin(Ok(Frame::data(Bytes::copy_from_slice(item))))
+            .map_err(|err| io::Error::new(ErrorKind::Other, err))
     }
 
     #[inline]
-    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.sender
+            .poll_flush_unpin(cx)
+            .map_err(|err| io::Error::new(ErrorKind::Other, err))
     }
 
     #[inline]
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        // this async fn actually is a normal fn
-        let fut = self.sender.send_trailers(HeaderMap::new());
-        let fut = pin!(fut);
+        if !self.is_trailer_sent {
+            self.sender
+                .unbounded_send(Ok(Frame::trailers(HeaderMap::new())))
+                .map_err(|_| io::Error::from(ErrorKind::BrokenPipe))?;
 
-        fut.poll(cx)
+            self.is_trailer_sent = true;
+        }
+
+        self.sender
+            .poll_close_unpin(cx)
             .map_err(|err| io::Error::new(ErrorKind::Other, err))
     }
 }

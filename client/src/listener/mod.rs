@@ -1,4 +1,3 @@
-use hyper::upgrade::Upgraded;
 use tokio::io;
 use tokio::io::{AsyncRead, AsyncWrite, BufStream, ReadHalf, WriteHalf};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
@@ -32,15 +31,6 @@ impl Split for TcpStream {
 }
 
 impl Split for BufStream<TcpStream> {
-    type Read = ReadHalf<Self>;
-    type Write = WriteHalf<Self>;
-
-    fn into_split(self) -> (Self::Read, Self::Write) {
-        io::split(self)
-    }
-}
-
-impl Split for Upgraded {
     type Read = ReadHalf<Self>;
     type Write = WriteHalf<Self>;
 

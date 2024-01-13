@@ -1,6 +1,6 @@
 [package]
 name = "lycoris-server"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 
@@ -12,18 +12,20 @@ bytes = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "fs"] }
 tokio-util = { version = "0.7", features = ["io"] }
 futures-util = { version = "0.3", features = ["io"] }
+futures-channel = "0.3"
 tap = "1"
 
 # log
 tracing = "0.1"
-tracing-subscriber = "0.3"
 
 # auth
 totp-rs = { version = "5", features = ["otpauth"] }
 
 # http/2
-http = "0.2"
-hyper = { version = "0.14", features = ["runtime", "http2", "http1", "server", "stream"] }
+http = "1"
+hyper = { version = "1", features = ["http2", "http1", "server"] }
+hyper-util = { version = "0.1", features = ["server", "server-auto", "http1", "http2", "tokio"] }
+http-body-util = "0.1"
 
 # tls
 tokio-rustls = "0.25"
@@ -37,5 +39,6 @@ clap = { version = "4", features = ["derive", "color", "suggestions"] }
 share = { path = "../share" }
 
 [dev-dependencies]
-hyper-rustls = { version = "0.25", features = ["http2", "logging"] }
-hyper = { version = "0.14", features = ["client"] }
+hyper-rustls = { version = "0.26", features = ["http2", "logging"] }
+hyper = { version = "1", features = ["client"] }
+hyper-util = { version = "0.1", features = ["client"] }

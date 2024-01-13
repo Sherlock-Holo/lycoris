@@ -1,16 +1,17 @@
 [package]
 name = "share"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 futures-util = { version = "0.3", features = ["io", "sink"] }
+futures-channel = { version = "0.3", features = ["sink"] }
 bytes = "1"
 tokio = { version = "1", features = ["macros", "rt", "io-util", "net"] }
-tokio-stream = { version = "0.1", features = ["time", "io-util"] }
-http = "0.2"
-hyper = { version = "0.14", features = ["stream"] }
+http = "1"
+hyper = "1"
 tap = "1"
 tracing = "0.1"
+tracing-subscriber = "0.3"

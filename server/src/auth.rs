@@ -1,8 +1,17 @@
+use std::fmt::{Debug, Formatter};
+
 use totp_rs::{Algorithm, TOTP};
 
-#[derive(Debug)]
 pub struct Auth {
     totp: TOTP,
+}
+
+impl Debug for Auth {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Auth")
+            .field("totp", &self.totp.to_string())
+            .finish()
+    }
 }
 
 impl Auth {

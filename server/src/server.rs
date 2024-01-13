@@ -1,13 +1,16 @@
 use std::convert::Infallible;
-use std::future;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use futures_util::TryStreamExt;
+use bytes::Bytes;
+use futures_channel::mpsc;
 use http::{Request, Response, StatusCode, Version};
-use hyper::server::Builder;
-use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Server};
+use http_body_util::combinators::BoxBody;
+use http_body_util::{BodyExt, Empty, StreamBody};
+use hyper::body::Incoming;
+use hyper::service::service_fn;
+use hyper_util::rt::{TokioExecutor, TokioTimer};
+use hyper_util::server::conn::auto::Builder;
 use share::h2_config::{
     INITIAL_CONNECTION_WINDOW_SIZE, INITIAL_WINDOW_SIZE, MAX_FRAME_SIZE, PING_INTERVAL,
     PING_TIMEOUT,
@@ -17,37 +20,41 @@ use share::proxy;
 use tap::TapFallible;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_util::io::{SinkWriter, StreamReader};
-use tracing::{error, info, instrument};
+use tracing::{debug, error, info, instrument};
 
 use crate::auth::Auth;
 use crate::tls_accept::TlsAcceptor;
 use crate::{addr, Error};
 
 pub struct HyperServer {
-    inner: Arc<HyperServerInner>,
-    builder: Option<Builder<TlsAcceptor>>,
+    handler: Arc<HyperServerHandler>,
+    builder: Builder<TokioExecutor>,
+    tls_acceptor: TlsAcceptor,
 }
 
 #[derive(Debug)]
-struct HyperServerInner {
+struct HyperServerHandler {
     token_header: String,
     auth: Auth,
 }
 
-impl HyperServerInner {
+impl HyperServerHandler {
     #[instrument]
-    async fn handle(&self, request: Request<Body>) -> Result<Response<Body>, Error> {
+    async fn handle(
+        &self,
+        request: Request<Incoming>,
+    ) -> Result<Response<BoxBody<Bytes, Infallible>>, Error> {
         if request.version() != Version::HTTP_2 {
             error!("reject not http2 request");
 
-            let mut response = Response::new(Body::empty());
+            let mut response = Response::new(Empty::new().boxed());
             *response.status_mut() = StatusCode::UNAUTHORIZED;
 
             return Ok(response);
         }
 
         if !self.auth_token(&request) {
-            let mut response = Response::new(Body::empty());
+            let mut response = Response::new(Empty::new().boxed());
             *response.status_mut() = StatusCode::UNAUTHORIZED;
 
             return Ok(response);
@@ -58,7 +65,7 @@ impl HyperServerInner {
         let mut body = request.into_body();
         let addrs = match Self::get_remote_addrs(&mut body).await {
             Err(Error::AddrNotEnough) => {
-                let mut response = Response::new(Body::empty());
+                let mut response = Response::new(Empty::new().boxed());
                 *response.status_mut() = StatusCode::BAD_REQUEST;
 
                 return Ok(response);
@@ -77,8 +84,8 @@ impl HyperServerInner {
 
         info!(?addrs, "connect to remote done");
 
-        let (body_sender, response_body) = Body::channel();
-        let response = Response::new(response_body);
+        let (body_tx, body_rx) = mpsc::unbounded();
+        let response = Response::new(StreamBody::new(body_rx).boxed());
 
         tokio::spawn(async move {
             let (remote_in_tcp, remote_out_tcp) = tcp_stream.into_split();
@@ -86,8 +93,8 @@ impl HyperServerInner {
             proxy::proxy(
                 remote_in_tcp,
                 remote_out_tcp,
-                StreamReader::new(BodyStream::new(body)),
-                SinkWriter::new(SinkBodySender::new(body_sender)),
+                StreamReader::new(BodyStream::from(body)),
+                SinkWriter::new(SinkBodySender::from(body_tx)),
             )
             .await
         });
@@ -95,29 +102,26 @@ impl HyperServerInner {
         Ok(response)
     }
 
-    async fn get_remote_addrs(body: &mut Body) -> Result<Vec<SocketAddr>, Error> {
-        let data = body
-            .try_next()
-            .await
-            .tap_err(|err| error!(%err, "get remote addr failed"))?;
+    #[instrument(err(Debug))]
+    async fn get_remote_addrs(body: &mut Incoming) -> Result<Vec<SocketAddr>, Error> {
+        let frame = match body.frame().await {
+            None => return Err(Error::AddrNotEnough),
+            Some(Err(err)) => return Err(err.into()),
+            Some(Ok(frame)) => frame,
+        };
 
-        match data {
-            None => {
-                error!("no remote addrs got");
+        let data = match frame.into_data() {
+            Ok(data) => data,
+            Err(_) => return Err(Error::AddrNotEnough),
+        };
 
-                Err(Error::AddrNotEnough)
-            }
+        debug!("get remote addrs data done");
 
-            Some(data) => {
-                info!("get remote addrs data done");
-
-                addr::parse_addr(&data).await
-            }
-        }
+        addr::parse_addr(&data).await
     }
 
-    #[instrument]
-    fn auth_token(&self, request: &Request<Body>) -> bool {
+    #[instrument(ret)]
+    fn auth_token(&self, request: &Request<Incoming>) -> bool {
         let token = match request.headers().get(&self.token_header) {
             None => {
                 error!("the h2 request doesn't have token header, reject it");
@@ -148,26 +152,56 @@ impl HyperServer {
         tls_acceptor: tokio_rustls::TlsAcceptor,
     ) -> Self {
         let tls_acceptor = TlsAcceptor::new(tcp_listener, tls_acceptor);
-        let inner = Arc::new(HyperServerInner {
+        let handler = Arc::new(HyperServerHandler {
             token_header: token_header.to_string(),
             auth,
         });
 
-        let builder = Server::builder(tls_acceptor)
-            .http2_initial_stream_window_size(INITIAL_WINDOW_SIZE)
-            .http2_initial_connection_window_size(INITIAL_CONNECTION_WINDOW_SIZE)
-            .http2_max_frame_size(MAX_FRAME_SIZE)
-            .http2_keep_alive_timeout(PING_TIMEOUT)
-            .http2_keep_alive_interval(PING_INTERVAL);
+        let mut builder = Builder::new(TokioExecutor::new());
+        builder
+            .http2()
+            .timer(TokioTimer::new())
+            .initial_stream_window_size(INITIAL_WINDOW_SIZE)
+            .initial_connection_window_size(INITIAL_CONNECTION_WINDOW_SIZE)
+            .max_frame_size(MAX_FRAME_SIZE)
+            .keep_alive_timeout(PING_TIMEOUT)
+            .keep_alive_interval(PING_INTERVAL);
 
         Self {
-            inner,
-            builder: Some(builder),
+            handler,
+            builder,
+            tls_acceptor,
         }
     }
 
     pub async fn start(&mut self) -> Result<(), Error> {
-        let inner = self.inner.clone();
+        loop {
+            let stream = match self.tls_acceptor.accept().await {
+                Err(err) => {
+                    error!(%err, "accept tls failed");
+
+                    continue;
+                }
+
+                Ok(stream) => stream,
+            };
+
+            let handler = self.handler.clone();
+            let builder = self.builder.clone();
+
+            tokio::spawn(async move {
+                let connection = builder.serve_connection(
+                    stream,
+                    service_fn(move |req| {
+                        let handler = handler.clone();
+                        async move { handler.handle(req).await }
+                    }),
+                );
+
+                connection.await
+            });
+        }
+        /*let inner = self.inner.clone();
 
         let builder = self.builder.take().expect("server has been stopped");
 
@@ -183,6 +217,6 @@ impl HyperServer {
             }))
             .await?;
 
-        Ok(())
+        Ok(())*/
     }
 }

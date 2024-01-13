@@ -1,5 +1,4 @@
 use std::any::Any;
-use std::io;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6};
 use std::path::Path;
 use std::str::FromStr;
@@ -16,16 +15,13 @@ use futures_util::{future, StreamExt};
 use hickory_resolver::error::ResolveErrorKind;
 use hickory_resolver::AsyncResolver;
 use share::helper::Ipv6AddrExt;
+use share::log::init_log;
 use tokio::fs::{self, File};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tokio_stream::wrappers::LinesStream;
-use tracing::level_filters::LevelFilter;
-use tracing::{info, subscriber, warn};
+use tracing::{info, warn};
 use tracing_log::LogTracer;
-use tracing_subscriber::filter::Targets;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::{fmt, Registry};
 use webpki_roots::TLS_SERVER_ROOTS;
 
 use self::bpf_map_name::*;
@@ -474,27 +470,6 @@ async fn get_remote_domain_ips(domain: &str) -> anyhow::Result<Vec<IpAddr>> {
                 .map(|record| IpAddr::from(record.0)),
         )
         .collect())
-}
-
-fn init_log(debug: bool) {
-    let layer = fmt::layer()
-        .pretty()
-        .with_target(true)
-        .with_writer(io::stderr);
-
-    let level = if debug {
-        LevelFilter::DEBUG
-    } else {
-        LevelFilter::INFO
-    };
-
-    let targets = Targets::new()
-        .with_target("h2", LevelFilter::OFF)
-        .with_default(LevelFilter::DEBUG);
-
-    let layered = Registry::default().with(targets).with(layer).with(level);
-
-    subscriber::set_global_default(layered).unwrap();
 }
 
 fn init_bpf_log(bpf: &mut Bpf) {

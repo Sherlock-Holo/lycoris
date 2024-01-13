@@ -1,17 +1,22 @@
+use std::convert::Infallible;
 use std::sync::Arc;
 
 use anyhow::Context;
 use bytes::Bytes;
+use futures_channel::mpsc;
 use http::{Request, StatusCode, Uri, Version};
-use hyper::client::HttpConnector;
-use hyper::{Body, Client};
+use http_body_util::combinators::BoxBody;
+use http_body_util::StreamBody;
+use hyper::body::Frame;
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
+use hyper_util::client::legacy::connect::HttpConnector;
+use hyper_util::client::legacy::Client;
+use hyper_util::rt::{TokioExecutor, TokioTimer};
 use share::h2_config::{
     INITIAL_CONNECTION_WINDOW_SIZE, INITIAL_WINDOW_SIZE, MAX_FRAME_SIZE, PING_INTERVAL,
     PING_TIMEOUT,
 };
 use share::hyper_body::{BodyStream, SinkBodySender};
-use tap::TapFallible;
 use tokio_rustls::rustls::ClientConfig;
 use tokio_util::io::{SinkWriter, StreamReader};
 use tracing::{error, info, instrument};
@@ -27,7 +32,7 @@ pub struct HyperConnector {
 
 #[derive(Debug)]
 struct HyperConnectorInner {
-    client: Client<HttpsConnector<HttpConnector>>,
+    client: Client<HttpsConnector<HttpConnector>, BoxBody<Bytes, Infallible>>,
     remote_addr: Uri,
     token_generator: TokenGenerator,
     token_header: String,
@@ -48,7 +53,8 @@ impl HyperConnector {
             .enable_http2()
             .build();
 
-        let client = Client::builder()
+        let client = Client::builder(TokioExecutor::new())
+            .timer(TokioTimer::new())
             .http2_only(true)
             .http2_initial_connection_window_size(INITIAL_WINDOW_SIZE)
             .http2_initial_connection_window_size(INITIAL_CONNECTION_WINDOW_SIZE)
@@ -70,7 +76,7 @@ impl HyperConnector {
 
 impl Connect for HyperConnector {
     type Read = StreamReader<BodyStream, Bytes>;
-    type Write = SinkWriter<SinkBodySender>;
+    type Write = SinkWriter<SinkBodySender<Infallible>>;
 
     #[instrument(err(Debug))]
     async fn connect(
@@ -80,20 +86,16 @@ impl Connect for HyperConnector {
         let token = self.inner.token_generator.generate_token();
         let remote_addr_data = addr::encode_addr(remote_addr);
 
-        let (mut sender, body) = Body::channel();
-        if sender.try_send_data(remote_addr_data).is_err() {
-            error!("send remote addr data failed");
-
-            return Err(anyhow::anyhow!("send remote addr data failed"));
-        }
-
-        let writer = SinkWriter::new(SinkBodySender::new(sender));
+        let (req_body_tx, req_body_rx) = mpsc::unbounded();
+        req_body_tx
+            .unbounded_send(Ok(Frame::data(remote_addr_data)))
+            .expect("unbounded_send should not fail");
 
         let request = Request::builder()
             .version(Version::HTTP_2)
             .uri(self.inner.remote_addr.clone())
             .header(&self.inner.token_header, token)
-            .body(body)
+            .body(BoxBody::new(StreamBody::new(req_body_rx)))
             .with_context(|| "build h2 request failed")?;
 
         let response = self
@@ -101,7 +103,7 @@ impl Connect for HyperConnector {
             .client
             .request(request)
             .await
-            .tap_err(|err| error!(%err, "send h2 request failed"))?;
+            .with_context(|| "send h2 request failed")?;
 
         info!("receive h2 response done");
 
@@ -114,8 +116,8 @@ impl Connect for HyperConnector {
 
         info!("get h2 stream done");
 
-        let reader = StreamReader::new(BodyStream::new(response.into_body()));
+        let reader = StreamReader::new(BodyStream::from(response.into_body()));
 
-        Ok((reader, writer))
+        Ok((reader, SinkWriter::new(req_body_tx.into())))
     }
 }

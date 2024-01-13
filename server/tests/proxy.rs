@@ -1,13 +1,18 @@
+use std::convert::Infallible;
 use std::io;
 use std::net::IpAddr;
 use std::path::Path;
 use std::sync::Arc;
 
 use bytes::{BufMut, Bytes, BytesMut};
-use futures_util::StreamExt;
+use futures_channel::mpsc;
+use futures_util::SinkExt;
 use http::{HeaderMap, HeaderValue, Request, Uri};
-use hyper::{Body, Client};
+use http_body_util::{BodyExt, StreamBody};
+use hyper::body::Frame;
 use hyper_rustls::HttpsConnectorBuilder;
+use hyper_util::client::legacy::Client;
+use hyper_util::rt::{TokioExecutor, TokioTimer};
 use lycoris_server::{Auth, HyperServer};
 use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -57,7 +62,10 @@ async fn main() {
         .with_server_name("localhost".to_string())
         .enable_http2()
         .build();
-    let client = Client::builder().http2_only(true).build(https_connector);
+    let client = Client::builder(TokioExecutor::new())
+        .timer(TokioTimer::new())
+        .http2_only(true)
+        .build(https_connector);
 
     let totp = create_totp(TOTP_SECRET.to_string());
     let secret = totp.generate_current().unwrap();
@@ -84,8 +92,8 @@ async fn main() {
         panic!("{} is not ipv4", remote_addr.ip());
     };
 
-    let (mut sender, body) = Body::channel();
-    let mut request = Request::new(body);
+    let (mut tx, rx) = mpsc::unbounded();
+    let mut request = Request::new(StreamBody::new(rx));
     *request.uri_mut() = Uri::try_from(format!("https://localhost:{}", addr.port())).unwrap();
     request
         .headers_mut()
@@ -96,27 +104,46 @@ async fn main() {
     buf.put(remote_ip.as_slice());
     buf.put_u16(remote_addr.port());
 
-    sender.send_data(buf.freeze()).await.unwrap();
+    tx.send(Ok::<_, Infallible>(Frame::data(buf.freeze())))
+        .await
+        .unwrap();
 
     let response = client.request(request).await.unwrap();
 
     let mut recv_stream = response.into_body();
 
-    let data = recv_stream.next().await.unwrap().unwrap();
+    let data = recv_stream
+        .frame()
+        .await
+        .unwrap()
+        .unwrap()
+        .into_data()
+        .unwrap();
     assert_eq!(data.as_ref(), b"test");
 
-    sender.send_data(Bytes::from_static(b"test")).await.unwrap();
-    sender.send_trailers(HeaderMap::new()).await.unwrap();
+    tx.send(Ok(Frame::data(Bytes::from_static(b"test"))))
+        .await
+        .unwrap();
+    tx.send(Ok(Frame::trailers(HeaderMap::new())))
+        .await
+        .unwrap();
 
     debug!("send trailers done");
 
-    drop(sender);
+    drop(tx);
 
     task.await.unwrap();
 
     debug!("task done");
 
-    assert!(recv_stream.next().await.is_none());
+    let trailers = recv_stream
+        .frame()
+        .await
+        .unwrap()
+        .unwrap()
+        .into_trailers()
+        .unwrap();
+    assert!(trailers.is_empty());
 }
 
 async fn load_certs(path: &Path) -> Vec<CertificateDer> {

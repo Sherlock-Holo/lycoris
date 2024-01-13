@@ -1,8 +1,17 @@
+use std::fmt::{Debug, Formatter};
+
 use totp_rs::{Algorithm, TOTP};
 
-#[derive(Debug)]
 pub struct TokenGenerator {
     totp: TOTP,
+}
+
+impl Debug for TokenGenerator {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TokenGenerator")
+            .field("totp", &self.totp.to_string())
+            .finish()
+    }
 }
 
 impl TokenGenerator {
