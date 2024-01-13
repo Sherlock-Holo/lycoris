@@ -182,7 +182,7 @@ async fn load_connector(
     let ca_cert = fs::read(ca_cert).await.unwrap();
 
     for ca_certs in rustls_pemfile::certs(&mut ca_cert.as_slice()) {
-        root_cert_store.add_parsable_certificates([ca_certs.unwrap()]);
+        root_cert_store.add(ca_certs.unwrap()).unwrap();
     }
 
     let client_config = ClientConfig::builder()

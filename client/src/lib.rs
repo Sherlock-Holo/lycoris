@@ -22,7 +22,6 @@ use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tokio_stream::wrappers::LinesStream;
 use tracing::{info, warn};
 use tracing_log::LogTracer;
-use webpki_roots::TLS_SERVER_ROOTS;
 
 use self::bpf_map_name::*;
 use crate::args::Args;
@@ -306,14 +305,16 @@ async fn load_connector(
     token_header: &str,
 ) -> anyhow::Result<HyperConnector> {
     let mut root_cert_store = RootCertStore::empty();
-    root_cert_store.extend(TLS_SERVER_ROOTS.iter().cloned());
+    for cert in rustls_native_certs::load_native_certs()? {
+        root_cert_store.add(cert)?;
+    }
 
     if let Some(ca_cert) = ca_cert {
         let ca_cert = fs::read(ca_cert).await?;
 
         for cert in rustls_pemfile::certs(&mut ca_cert.as_slice()) {
             let cert = cert?;
-            root_cert_store.add_parsable_certificates([cert]);
+            root_cert_store.add(cert)?;
         }
     }
 
