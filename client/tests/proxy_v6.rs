@@ -1,10 +1,10 @@
 use std::any::Any;
+use std::env;
 use std::ffi::OsStr;
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::{env, io};
 
 use aya::maps::lpm_trie::{Key, LpmTrie};
 use aya::maps::Array;
@@ -22,6 +22,7 @@ use lycoris_client::bpf_share::{Ipv4Addr, Ipv6Addr};
 use lycoris_client::{BpfListener, Client, HyperConnector, OwnedLink, TokenGenerator};
 use rustix::process::getuid;
 use share::helper::Ipv6AddrExt;
+use share::log::init_log;
 use tokio::fs;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
@@ -29,12 +30,8 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
 use tokio_rustls::rustls::{ClientConfig, RootCertStore, ServerConfig};
 use tokio_rustls::TlsAcceptor;
-use tracing::level_filters::LevelFilter;
-use tracing::{info, subscriber};
+use tracing::info;
 use tracing_log::LogTracer;
-use tracing_subscriber::filter::Targets;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::{fmt, Registry};
 
 const CGROUP_PATH: &str = "/sys/fs/cgroup";
 const BPF_ELF: &str = "../target/bpfel-unknown-none/release/lycoris-bpf";
@@ -62,7 +59,7 @@ async fn main() {
         panic!("this integration test must run with root");
     }
 
-    init_log();
+    init_log(true);
 
     let listen_addr = SocketAddrV4::from_str(TEST_LISTEN_ADDR).unwrap();
     let listen_addr_v6 = SocketAddrV6::from_str(TEST_LISTEN_ADDR_V6).unwrap();
@@ -317,22 +314,6 @@ fn set_proxy_ip_list_blacklist_mode(bpf: &mut Bpf) {
         .unwrap();
 
     proxy_ipv4_list_mode.set(0, 0u8, 0).unwrap();
-}
-
-fn init_log() {
-    let layer = fmt::layer()
-        .pretty()
-        .with_target(true)
-        .with_writer(io::stderr);
-    let targets = Targets::new()
-        .with_target("h2", LevelFilter::OFF)
-        .with_default(LevelFilter::DEBUG);
-    let layered = Registry::default()
-        .with(targets)
-        .with(layer)
-        .with(LevelFilter::DEBUG);
-
-    subscriber::set_global_default(layered).unwrap();
 }
 
 fn init_bpf_log(bpf: &mut Bpf) {

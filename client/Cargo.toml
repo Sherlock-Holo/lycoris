@@ -56,4 +56,4 @@ share = { path = "../share" }
 
 [dev-dependencies]
 rustix = { version = "0.38", features = ["process"] }
-h2 = { version = "0.3", features = ["stream"] }
+h2 = { version = "0.4", features = ["stream"] }

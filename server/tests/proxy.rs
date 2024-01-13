@@ -1,5 +1,4 @@
 use std::convert::Infallible;
-use std::io;
 use std::net::IpAddr;
 use std::path::Path;
 use std::sync::Arc;
@@ -14,6 +13,7 @@ use hyper_rustls::HttpsConnectorBuilder;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::{TokioExecutor, TokioTimer};
 use lycoris_server::{Auth, HyperServer};
+use share::log::init_log;
 use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -21,18 +21,14 @@ use tokio_rustls::rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
 use tokio_rustls::rustls::{ClientConfig, RootCertStore, ServerConfig};
 use tokio_rustls::TlsAcceptor;
 use totp_rs::{Algorithm, TOTP};
-use tracing::level_filters::LevelFilter;
-use tracing::{debug, subscriber};
-use tracing_subscriber::filter::Targets;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::{fmt, Registry};
+use tracing::debug;
 
 #[tokio::test]
 async fn main() {
     const TOTP_SECRET: &str = "test-secrettest-secret";
     const TOTP_HEADER: &str = "x-secret";
 
-    init_log();
+    init_log(true);
 
     let auth = Auth::new(TOTP_SECRET.to_string(), None).unwrap();
 
@@ -186,20 +182,4 @@ fn create_totp(secret: String) -> TOTP {
         "default_account".to_string(),
     )
     .unwrap()
-}
-
-fn init_log() {
-    let layer = fmt::layer()
-        .pretty()
-        .with_target(true)
-        .with_writer(io::stderr);
-    let targets = Targets::new()
-        .with_target("h2", LevelFilter::OFF)
-        .with_default(LevelFilter::DEBUG);
-    let layered = Registry::default()
-        .with(targets)
-        .with(layer)
-        .with(LevelFilter::DEBUG);
-
-    subscriber::set_global_default(layered).unwrap();
 }
