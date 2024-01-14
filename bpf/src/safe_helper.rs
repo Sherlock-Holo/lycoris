@@ -4,7 +4,7 @@ use aya_bpf::helpers::gen;
 use unroll::unroll_for_loops;
 
 /// get current comm safe helper, will return nul index
-pub fn bpf_get_current_comm(buf: &mut [u8; 64]) -> Result<usize, c_long> {
+pub fn bpf_get_current_comm(buf: &mut [u8; 16]) -> Result<usize, c_long> {
     unsafe {
         let res = gen::bpf_get_current_comm(buf.as_mut_ptr() as *mut _, buf.len() as _);
         if res < 0 {
@@ -16,12 +16,12 @@ pub fn bpf_get_current_comm(buf: &mut [u8; 64]) -> Result<usize, c_long> {
 }
 
 #[unroll_for_loops]
-fn find_nul_index(buf: &[u8; 64]) -> usize {
-    for i in 0..64 {
+fn find_nul_index(buf: &[u8; 16]) -> usize {
+    for i in 0..16 {
         if buf[i] == 0 {
             return i;
         }
     }
 
-    64 - 1
+    16 - 1
 }
