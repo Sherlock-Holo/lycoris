@@ -6,6 +6,7 @@ use aya_bpf::maps::lpm_trie::Key;
 use aya_bpf::programs::SockAddrContext;
 use aya_log_ebpf::debug;
 
+use crate::command_check::command_in_list;
 use crate::kernel_binding::require;
 use crate::map::*;
 use crate::{should_proxy, Ipv4Addr};
@@ -20,6 +21,8 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
     {
         return Ok(());
     }
+
+    command_in_list(&ctx)?;
 
     let in_container = unsafe {
         let root_netns_cookie = bpf_get_netns_cookie(ptr::null_mut());

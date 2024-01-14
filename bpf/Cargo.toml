@@ -9,6 +9,7 @@ license = "MIT"
 [dependencies]
 aya-bpf = { git = "https://github.com/aya-rs/aya", rev = "5c86b7e" }
 aya-log-ebpf = { git = "https://github.com/aya-rs/aya", rev = "5c86b7e" }
+unroll = "0.1"
 
 [build-dependencies]
 bindgen = "0.69"

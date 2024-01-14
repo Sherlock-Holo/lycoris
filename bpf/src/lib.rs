@@ -8,8 +8,10 @@ pub use sockops_callback::handle_sockops;
 
 mod cgroup_connect4;
 mod cgroup_connect6;
+mod command_check;
 mod kernel_binding;
 mod map;
+mod safe_helper;
 mod sockops_callback;
 
 #[repr(C)]
