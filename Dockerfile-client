@@ -1,0 +1,36 @@
+FROM archlinux as bpf-builder
+
+RUN pacman -Sy rustup clang linux-api-headers lib32-glibc --noconfirm
+
+RUN rustup toolchain install nightly
+RUN rustup default nightly-x86_64-unknown-linux-gnu
+RUN rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
+
+RUN cargo install bpf-linker
+
+COPY . /lycoris
+
+WORKDIR /lycoris/bpf
+
+RUN cargo build --release -Z trim-paths
+
+RUN cp /lycoris/target/bpfel-unknown-none/release/lycoris-bpf /lycoris-bpf
+
+FROM rust:slim as builder
+
+RUN rustup toolchain install nightly
+RUN rustup default nightly-x86_64-unknown-linux-gnu
+
+RUN apt update && apt install libclang-dev linux-headers-amd64 libc6-dev -y
+
+COPY . /lycoris
+
+WORKDIR /lycoris/client
+
+RUN cargo build --release -Z trim-paths
+
+FROM gcr.io/distroless/cc-debian12
+LABEL authors="Sherlock Holo"
+
+COPY --from=builder /lycoris/target/release/lycoris-client /lycoris-client
+COPY --from=bpf-builder /lycoris-bpf /lycoris-bpf
