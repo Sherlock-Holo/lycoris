@@ -14,7 +14,7 @@ pub struct Config {
     pub ca_cert: Option<PathBuf>,
     pub token_secret: String,
     pub token_header: String,
-    pub cgroup_path: Option<PathBuf>,
+    pub cgroup_path: PathBuf,
     #[serde(default = "default_blacklist_mode")]
     pub blacklist_mode: bool,
     #[serde(default)]

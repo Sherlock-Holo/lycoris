@@ -91,25 +91,13 @@ async fn run_bpf(args: Args, config: Config) -> anyhow::Result<()> {
         "set proxy ip list mode done"
     );
 
-    let _connect4_link = load_connect4(
-        &mut bpf,
-        config.cgroup_path.as_ref().expect("cgroup path not set"),
-    )
-    .await?;
+    let _connect4_link = load_connect4(&mut bpf, &config.cgroup_path).await?;
 
     info!("load connect4 done");
 
-    let _connect6_link = load_connect6(
-        &mut bpf,
-        config.cgroup_path.as_ref().expect("cgroup path not set"),
-    )
-    .await?;
+    let _connect6_link = load_connect6(&mut bpf, &config.cgroup_path).await?;
 
-    let _sockops_link = load_established_sockops(
-        &mut bpf,
-        config.cgroup_path.as_ref().expect("cgroup path not set"),
-    )
-    .await?;
+    let _sockops_link = load_established_sockops(&mut bpf, &config.cgroup_path).await?;
 
     info!("load sockops done");
 
