@@ -47,12 +47,13 @@ it just a simple txt like
 
 - [x] TCP4 proxy
 - [ ] UDP4 proxy
-- [x] whitelist/blacklist ip mode switch
 - [x] TCP6 proxy
 - [ ] UDP6 proxy
+- [x] whitelist/blacklist ip mode switch
+- [x] container proxy
+  - need set `container_bridge_listen_addr` and `container_bridge_listen_addr_v6`
+  - podman with slirp4netns doesn't need set, it connects tcp outside the container
+  - docker need set, if use bridge+veth mode
+- [ ] process comm filter (WIP)
 
-# need help
 
-- [ ] container proxy
-
-> container can't access the proxy client in root network namespace
