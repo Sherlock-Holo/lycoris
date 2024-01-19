@@ -18,10 +18,29 @@ pub struct Config {
     #[serde(default = "default_blacklist_mode")]
     pub blacklist_mode: bool,
     #[serde(default)]
+    pub command_list: Vec<String>,
+    #[serde(default = "default_command_in_list_directly")]
+    pub command_in_list_directly: bool,
+    #[serde(default)]
     pub ip_list: Vec<PathBuf>,
 }
 
-#[inline]
+impl Config {
+    pub fn check(&self) -> anyhow::Result<()> {
+        for command in &self.command_list {
+            if command.len() > 15 {
+                return Err(anyhow::anyhow!("command {command} length > 15"));
+            }
+        }
+
+        Ok(())
+    }
+}
+
+const fn default_command_in_list_directly() -> bool {
+    true
+}
+
 const fn default_blacklist_mode() -> bool {
     true
 }
