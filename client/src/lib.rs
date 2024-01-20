@@ -1,4 +1,5 @@
 use std::any::Any;
+use std::ffi::CString;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6};
 use std::path::Path;
 use std::str::FromStr;
@@ -7,7 +8,7 @@ use aya::maps::lpm_trie::{Key, LpmTrie};
 use aya::maps::Array;
 use aya::programs::cgroup_sock_addr::CgroupSockAddrLink;
 use aya::programs::{CgroupSockAddr, SockOps};
-use aya::Bpf;
+use aya::{maps, Bpf};
 use aya_log::BpfLogger;
 use cidr::{Ipv4Inet, Ipv6Inet};
 use clap::Parser;
@@ -51,6 +52,7 @@ pub async fn run() -> anyhow::Result<()> {
 
     let config = fs::read(&args.config).await?;
     let config = serde_yaml::from_slice::<Config>(&config)?;
+    config.check()?;
 
     info!(?config, "load config done");
 
@@ -81,6 +83,11 @@ async fn run_bpf(args: Args, config: Config) -> anyhow::Result<()> {
     info!("set target ip done");
 
     set_proxy_ip_list_mode(&mut bpf, config.blacklist_mode)?;
+    set_command_list(
+        &mut bpf,
+        config.command_list,
+        config.command_in_list_directly,
+    )?;
 
     if !config.blacklist_mode {
         append_remote_ip_list(&mut bpf, &remote_domain_ips)?;
@@ -415,6 +422,38 @@ fn set_proxy_ip_list_mode(bpf: &mut Bpf, blacklist_mode: bool) -> anyhow::Result
     let mode = if blacklist_mode { 0 } else { 1 };
 
     proxy_ipv4_list_mode.set(0, mode, 0)?;
+
+    Ok(())
+}
+
+fn set_command_list(
+    bpf: &mut Bpf,
+    commands: Vec<String>,
+    command_in_list_directly: bool,
+) -> anyhow::Result<()> {
+    let mut command_map: maps::HashMap<_, [u8; 16], u8> = bpf
+        .map_mut(COMM_MAP)
+        .expect("COMM_MAP not found")
+        .try_into()?;
+
+    for command in commands {
+        let command = CString::new(command)?;
+        let command = command.as_bytes_with_nul();
+        let mut buf = [0u8; 16];
+        let n = buf.len().min(command.len());
+        buf[..n].copy_from_slice(&command[..n]);
+
+        command_map.insert(buf, 1, 0)?;
+    }
+
+    let mut command_mode: Array<_, u8> = bpf
+        .map_mut(COMM_MAP_MODE)
+        .expect("COMM_MAP_MODE not found")
+        .try_into()?;
+
+    let command_in_list_directly = if command_in_list_directly { 0 } else { 1 };
+
+    command_mode.set(0, command_in_list_directly, 0)?;
 
     Ok(())
 }

@@ -1,6 +1,6 @@
 use aya_bpf::bindings::BPF_F_NO_PREALLOC;
 use aya_bpf::macros::map;
-use aya_bpf::maps::{Array, LpmTrie, LruHashMap};
+use aya_bpf::maps::{Array, HashMap, LpmTrie, LruHashMap};
 
 use crate::{ConnectedIpv4Addr, ConnectedIpv6Addr, Ipv4Addr, Ipv6Addr};
 
@@ -47,3 +47,15 @@ pub static PROXY_IPV4_CLIENT: Array<Ipv4Addr> = Array::with_max_entries(2, 0);
 /// only has 1 element
 #[map]
 pub static PROXY_IPV6_CLIENT: Array<Ipv6Addr> = Array::with_max_entries(2, 0);
+
+/// process comm map
+#[map]
+pub static COMM_MAP: HashMap<[u8; 16], u8> = HashMap::with_max_entries(1024, 0);
+
+/// [`COMM_MAP`] mode
+///
+/// `0` means when comm in [`COMM_MAP`], connect directly
+///
+/// `1` means when comm not in [`COMM_MAP`], connect directly
+#[map]
+pub static COMM_MAP_MODE: Array<u8> = Array::with_max_entries(1, 0);
