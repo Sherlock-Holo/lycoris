@@ -340,7 +340,7 @@ async fn set_proxy_ip_list<'a, I: Iterator<Item = &'a Path>>(
         while let Some(result) = reader.next().await {
             let line = result?;
             let line = line.trim();
-            if line.is_empty() {
+            if line.is_empty() || line.starts_with('#') {
                 continue;
             }
 
