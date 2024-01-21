@@ -72,4 +72,4 @@ just run `cargo build --release`
 1. you can't build in the lycoris root dir, you should build inside `bpf`, `client`, `server` dir, because `lycoris-bpf`
    target is `bpfel-unknown-none`
 2. when build the `lycoris-bpf`, you must use release build mode, otherwise rustc and llvm will generate some
-3. instruction which will make bpf verifier unhappy
+   instruction which will make bpf verifier unhappy
