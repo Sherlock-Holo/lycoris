@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::ffi::CString;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6};
 use std::path::Path;
@@ -7,7 +6,7 @@ use std::str::FromStr;
 use aya::maps::lpm_trie::{Key, LpmTrie};
 use aya::maps::Array;
 use aya::programs::cgroup_sock_addr::CgroupSockAddrLink;
-use aya::programs::{CgroupSockAddr, SockOps};
+use aya::programs::{CgroupSockAddr, Link, SockOps};
 use aya::{maps, Bpf};
 use aya_log::BpfLogger;
 use cidr::{Ipv4Inet, Ipv6Inet};
@@ -181,11 +180,11 @@ async fn load_connect6(
     Ok(connect6_prog.take_link(connect6_link_id)?.into())
 }
 
-// return Box<dyn Any> because the SockOpsLink is un-exported
+// return OwnedLink<impl Link> because the SockOpsLink is un-exported
 async fn load_established_sockops(
     bpf: &mut Bpf,
     cgroup_path: &Path,
-) -> anyhow::Result<Box<dyn Any>> {
+) -> anyhow::Result<OwnedLink<impl Link>> {
     let cgroup_file = File::open(cgroup_path).await?;
 
     let prog: &mut SockOps = bpf
@@ -201,7 +200,7 @@ async fn load_established_sockops(
 
     info!("attach established_connect done");
 
-    Ok(Box::new(OwnedLink::from(prog.take_link(link_id)?)))
+    Ok(OwnedLink::from(prog.take_link(link_id)?))
 }
 
 fn set_proxy_addr(
