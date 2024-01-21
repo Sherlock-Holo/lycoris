@@ -10,7 +10,7 @@ pub struct Args {
 
     /// bpf elf path
     #[clap(short, long)]
-    pub bpf_elf: Option<PathBuf>,
+    pub bpf_elf: PathBuf,
 
     /// debug log
     #[clap(short, long, action)]

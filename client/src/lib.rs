@@ -64,7 +64,9 @@ async fn run_bpf(args: Args, config: Config) -> anyhow::Result<()> {
 
     info!(?remote_domain_ips, "get remote domain ip done");
 
-    let mut bpf = Bpf::load_file(args.bpf_elf.expect("bpf elf not set"))?;
+    let mut bpf = Bpf::load_file(&args.bpf_elf)?;
+
+    info!("load bpf done");
 
     init_bpf_log(&mut bpf);
 
