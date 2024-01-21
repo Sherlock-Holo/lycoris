@@ -83,19 +83,19 @@ async fn run_bpf(args: Args, config: Config) -> anyhow::Result<()> {
 
     info!("set target ip done");
 
-    set_proxy_ip_list_mode(&mut bpf, config.blacklist_mode)?;
+    set_proxy_ip_list_mode(&mut bpf, config.ip_in_list_directly)?;
     set_command_list(
         &mut bpf,
         config.command_list,
         config.command_in_list_directly,
     )?;
 
-    if !config.blacklist_mode {
+    if config.ip_in_list_directly {
         append_remote_ip_list(&mut bpf, &remote_domain_ips)?;
     }
 
     info!(
-        blacklist_mode = config.blacklist_mode,
+        ip_in_list_directly = config.ip_in_list_directly,
         "set proxy ip list mode done"
     );
 
@@ -414,15 +414,15 @@ fn append_remote_ip_list(bpf: &mut Bpf, remote_domain_ip: &[IpAddr]) -> anyhow::
     Ok(())
 }
 
-fn set_proxy_ip_list_mode(bpf: &mut Bpf, blacklist_mode: bool) -> anyhow::Result<()> {
-    let mut proxy_ipv4_list_mode: Array<_, u8> = bpf
-        .map_mut(PROXY_IPV4_LIST_MODE)
-        .expect("PROXY_IPV4_LIST_MODE not found")
+fn set_proxy_ip_list_mode(bpf: &mut Bpf, ip_in_list_directly: bool) -> anyhow::Result<()> {
+    let mut proxy_list_mode: Array<_, u8> = bpf
+        .map_mut(PROXY_LIST_MODE)
+        .expect("PROXY_LIST_MODE not found")
         .try_into()?;
 
-    let mode = if blacklist_mode { 0 } else { 1 };
+    let mode = if ip_in_list_directly { 0 } else { 1 };
 
-    proxy_ipv4_list_mode.set(0, mode, 0)?;
+    proxy_list_mode.set(0, mode, 0)?;
 
     Ok(())
 }

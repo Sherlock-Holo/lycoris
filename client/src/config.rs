@@ -15,8 +15,8 @@ pub struct Config {
     pub token_secret: String,
     pub token_header: String,
     pub cgroup_path: PathBuf,
-    #[serde(default = "default_blacklist_mode")]
-    pub blacklist_mode: bool,
+    #[serde(default = "default_ip_in_list_directly")]
+    pub ip_in_list_directly: bool,
     #[serde(default)]
     pub command_list: Vec<String>,
     #[serde(default = "default_command_in_list_directly")]
@@ -41,6 +41,6 @@ const fn default_command_in_list_directly() -> bool {
     true
 }
 
-const fn default_blacklist_mode() -> bool {
+const fn default_ip_in_list_directly() -> bool {
     true
 }

@@ -10,7 +10,7 @@ use aya_log_ebpf::debug;
 use crate::command_check::command_can_connect_directly;
 use crate::kernel_binding::require;
 use crate::map::*;
-use crate::{u16_ipv6_to_u8_ipv6, Ipv6Addr};
+use crate::{connect_directly, u16_ipv6_to_u8_ipv6, Ipv6Addr};
 
 /// check connect ipv6 in proxy ipv6 list or not, if in list, save the origin dst ipv6 addr into
 /// DST_IPV6_ADDR_STORE with (cookie, origin_dst_ipv6_addr), otherwise let it connect directly
@@ -38,19 +38,19 @@ pub fn handle_cgroup_connect6(ctx: SockAddrContext) -> Result<(), c_long> {
     let user_ipv6_octets = u16_ipv6_to_u8_ipv6(user_ipv6);
     let key = Key::new(128, user_ipv6);
 
-    let is_blacklist_mode = match PROXY_IPV4_LIST_MODE.get(0) {
+    let in_list_connect_directly = match PROXY_LIST_MODE.get(0) {
         None => {
-            debug!(&ctx, "get proxy ipv6 list mode failed");
+            debug!(&ctx, "get proxy list mode failed");
 
             return Err(0);
         }
 
-        Some(mode) => *mode == BLACKLIST_MODE,
+        Some(mode) => *mode == CONNECT_DIRECTLY_MODE,
     };
 
     let in_list = PROXY_IPV6_LIST.get(&key).copied().unwrap_or(0) > 0;
-    if !crate::should_proxy(is_blacklist_mode, in_list) {
-        // debug!(&ctx, "{:ipv6} is direct connect ip", user_ipv6_octets);
+    if connect_directly(in_list_connect_directly, in_list) {
+        debug!(&ctx, "{:i} is direct connect ip", user_ipv6_octets);
 
         return Ok(());
     }
