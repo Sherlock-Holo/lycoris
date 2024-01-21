@@ -1,6 +1,6 @@
 [package]
 name = "lycoris-client"
-version = "0.2.5"
+version = "0.2.6"
 edition = "2021"
 license = "MIT"
 rust-version = "1.75"
@@ -24,8 +24,8 @@ trait-variant = "0.1"
 tracing = "0.1"
 
 # bpf
-aya = { git = "https://github.com/aya-rs/aya", rev = "5c86b7e", features = ["async_tokio"] }
-aya-log = { git = "https://github.com/aya-rs/aya", rev = "5c86b7e" }
+aya = { git = "https://github.com/aya-rs/aya", rev = "80736c5", features = ["async_tokio"] }
+aya-log = { git = "https://github.com/aya-rs/aya", rev = "80736c5" }
 tracing-log = "0.2"
 
 # auth

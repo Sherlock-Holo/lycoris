@@ -1,5 +1,6 @@
 use core::ffi::c_long;
 use core::mem;
+use core::num::NonZeroUsize;
 
 use aya_bpf::bindings::BPF_SOCK_OPS_ACTIVE_ESTABLISHED_CB;
 use aya_bpf::helpers::*;
@@ -140,7 +141,7 @@ impl From<[u32; 4]> for U32Array4 {
 }
 
 impl WriteToBuf for U32Array4 {
-    fn write(self, buf: &mut [u8]) -> Result<usize, ()> {
+    fn write(self, buf: &mut [u8]) -> Option<NonZeroUsize> {
         let v = unsafe { *(self.0.as_ptr() as *const u128) };
         v.to_be_bytes().write(buf)
     }

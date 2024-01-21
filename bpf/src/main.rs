@@ -7,20 +7,20 @@ use aya_bpf::macros::{cgroup_sock_addr, sock_ops};
 use aya_bpf::programs::{SockAddrContext, SockOpsContext};
 
 #[cgroup_sock_addr(connect4)]
-fn cgroup_connect4(ctx: SockAddrContext) -> c_int {
+fn connect4(ctx: SockAddrContext) -> c_int {
     let _ = lycoris_bpf::handle_cgroup_connect4(ctx);
 
     1
 }
 
 #[cgroup_sock_addr(connect6)]
-fn cgroup_connect6(ctx: SockAddrContext) -> c_int {
+fn connect6(ctx: SockAddrContext) -> c_int {
     let _ = lycoris_bpf::handle_cgroup_connect6(ctx);
 
     1
 }
 
-#[sock_ops(name = "established_connect")]
+#[sock_ops]
 fn established_connect(ctx: SockOpsContext) -> c_uint {
     let _ = lycoris_bpf::handle_sockops(ctx);
 
