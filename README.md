@@ -19,7 +19,7 @@ there are 3 parts about lycoris
 
 ### lycoris-bpf
 
-`lycoris-bpf` will hook all socket connect(for now it only hook TCP4), and check if the dst ip should be proxies or not,
+`lycoris-bpf` will hook all socket connect, and check if the dst ip should be proxies or not,
 if it is a need proxy ip, lycoris-bpf will change the socket dst ip to `lycoris-client`, and save the real dst ip and
 port in bpf lru map, so `lycoris-client` can get it and send the dst ip and port to `lycoris-server` to connect the
 target
@@ -54,6 +54,22 @@ it just a simple txt like
   - need set `container_bridge_listen_addr` and `container_bridge_listen_addr_v6`
   - podman with slirp4netns doesn't need set, it connects tcp outside the container
   - docker need set, if use bridge+veth mode
-- [ ] process comm filter (WIP)
+- [x] process comm filter
 
+## build
 
+lycoris require nightly rust toolchain when build `lycoris-bpf`
+
+### build dependencies
+
+- rust toolchain
+- bpf-linker(can installed by `cargo install`)
+
+just run `cargo build --release`
+
+### notes
+
+1. you can't build in the lycoris root dir, you should build inside `bpf`, `client`, `server` dir, because `lycoris-bpf`
+   target is `bpfel-unknown-none`
+2. when build the `lycoris-bpf`, you must use release build mode, otherwise rustc and llvm will generate some
+3. instruction which will make bpf verifier unhappy
