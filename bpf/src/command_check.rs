@@ -7,6 +7,7 @@ use aya_log_ebpf::debug;
 use crate::map::{COMM_MAP, COMM_MAP_MODE};
 use crate::safe_helper;
 
+#[inline]
 pub fn command_can_connect_directly(ctx: &SockAddrContext) -> Result<bool, c_long> {
     let mut command = [0u8; 16];
     let null_index = safe_helper::bpf_get_current_comm(&mut command)?;
