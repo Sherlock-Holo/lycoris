@@ -50,12 +50,8 @@ pub struct Ipv6Addr {
 }
 
 #[inline]
-fn should_proxy(is_blacklist_mode: bool, in_list: bool) -> bool {
-    if is_blacklist_mode {
-        in_list
-    } else {
-        !in_list
-    }
+fn connect_directly(in_list_connect_directly: bool, in_list: bool) -> bool {
+    in_list_connect_directly && in_list
 }
 
 #[inline]

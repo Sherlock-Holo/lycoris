@@ -8,7 +8,7 @@ ca_cert: example/ca.cert
 token_secret: test
 token_header: x-token
 cgroup_path: /sys/fs/cgroup
-blacklist_mode: false
+ip_in_list_directly: true
 ip_list:
   - file1
   - file2

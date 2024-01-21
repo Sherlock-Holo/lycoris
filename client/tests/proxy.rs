@@ -69,7 +69,7 @@ async fn main() {
     init_bpf_log(&mut bpf);
 
     set_proxy_addr(&mut bpf, listen_addr, listen_addr_v6);
-    set_proxy_ip_list_blacklist_mode(&mut bpf);
+    set_proxy_ip_list_mode(&mut bpf);
     load_target_ip(&mut bpf);
 
     let _connect4_link = load_connect4(&mut bpf, Path::new(CGROUP_PATH)).await;
@@ -308,14 +308,14 @@ fn set_proxy_addr(bpf: &mut Bpf, addr: SocketAddrV4, addr_v6: SocketAddrV6) {
     v6_proxy_server.set(0, proxy_addr, 0).unwrap();
 }
 
-fn set_proxy_ip_list_blacklist_mode(bpf: &mut Bpf) {
+fn set_proxy_ip_list_mode(bpf: &mut Bpf) {
     let mut proxy_ipv4_list_mode: Array<_, u8> = bpf
-        .map_mut(PROXY_IPV4_LIST_MODE)
-        .expect("PROXY_IPV4_LIST_MODE not found")
+        .map_mut(PROXY_LIST_MODE)
+        .expect("PROXY_LIST_MODE not found")
         .try_into()
         .unwrap();
 
-    proxy_ipv4_list_mode.set(0, 0u8, 0).unwrap();
+    proxy_ipv4_list_mode.set(0, 1u8, 0).unwrap();
 }
 
 fn init_bpf_log(bpf: &mut Bpf) {

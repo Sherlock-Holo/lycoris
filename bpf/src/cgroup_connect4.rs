@@ -9,7 +9,7 @@ use aya_log_ebpf::debug;
 use crate::command_check::command_can_connect_directly;
 use crate::kernel_binding::require;
 use crate::map::*;
-use crate::{should_proxy, Ipv4Addr};
+use crate::{connect_directly, Ipv4Addr};
 
 /// check connect ipv4 in proxy ipv4 list or not, if in list, save the origin dst ipv4 addr into
 /// DST_IPV4_ADDR_STORE with (cookie, origin_dst_ipv4_addr), otherwise let it connect directly
@@ -37,18 +37,18 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
     let user_ip4 = user_ip4_u32.to_be_bytes();
     let key = Key::new(32, user_ip4);
 
-    let is_blacklist_mode = match PROXY_IPV4_LIST_MODE.get(0) {
+    let in_list_connect_directly = match PROXY_LIST_MODE.get(0) {
         None => {
-            debug!(&ctx, "get proxy ipv4 list mode failed");
+            debug!(&ctx, "get proxy list mode failed");
 
             return Err(0);
         }
 
-        Some(mode) => *mode == BLACKLIST_MODE,
+        Some(mode) => *mode == CONNECT_DIRECTLY_MODE,
     };
 
     let in_list = PROXY_IPV4_LIST.get(&key).copied().unwrap_or(0) > 0;
-    if !should_proxy(is_blacklist_mode, in_list) {
+    if connect_directly(in_list_connect_directly, in_list) {
         debug!(&ctx, "{:i} is direct connect ip", user_ip4_u32);
 
         return Ok(());

@@ -32,13 +32,15 @@ pub static PROXY_IPV4_LIST: LpmTrie<[u8; 4], u8> =
 pub static PROXY_IPV6_LIST: LpmTrie<[u16; 8], u8> =
     LpmTrie::with_max_entries(65535, BPF_F_NO_PREALLOC);
 
-/// proxy ipv4 list mode, 0 is blacklist mode, 1 is whitelist mode
-/// when blacklist mode, the dst ip in list will be proxy
-/// when whitelist mode, the dst ip in list will not be proxy
+/// proxy [`PROXY_IPV4_LIST`] and [`PROXY_IPV6_LIST`] list mode
+///
+/// `0` means the dst ip in list will connect directly
+///
+/// `1` means the dst ip in list will not be proxy
 #[map]
-pub static PROXY_IPV4_LIST_MODE: Array<u8> = Array::with_max_entries(1, 0);
+pub static PROXY_LIST_MODE: Array<u8> = Array::with_max_entries(1, 0);
 
-pub const BLACKLIST_MODE: u8 = 0;
+pub const CONNECT_DIRECTLY_MODE: u8 = 0;
 
 /// only has 1 element
 #[map]

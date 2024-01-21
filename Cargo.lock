@@ -953,7 +953,7 @@ dependencies = [
 
 [[package]]
 name = "lycoris-bpf"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "aya-bpf",
  "aya-log-ebpf",
@@ -963,7 +963,7 @@ dependencies = [
 
 [[package]]
 name = "lycoris-client"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "aya",
@@ -999,7 +999,7 @@ dependencies = [
 
 [[package]]
 name = "lycoris-server"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "bytes",
  "clap",

@@ -34,7 +34,7 @@ bpf lru map, and send to `lycoris-server`
 `lycoris-server` is a simple proxy server, like [camouflage](https://github.com/Sherlock-Holo/camouflage), trojan or
 something else
 
-## the whitelist/blacklist ip file
+## the ip list file
 
 it just a simple txt like
 
@@ -49,7 +49,7 @@ it just a simple txt like
 - [ ] UDP4 proxy
 - [x] TCP6 proxy
 - [ ] UDP6 proxy
-- [x] whitelist/blacklist ip mode switch
+- [x] ip list filter
 - [x] container proxy
   - need set `container_bridge_listen_addr` and `container_bridge_listen_addr_v6`
   - podman with slirp4netns doesn't need set, it connects tcp outside the container
