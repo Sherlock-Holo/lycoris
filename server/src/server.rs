@@ -201,22 +201,5 @@ impl HyperServer {
                 connection.await
             });
         }
-        /*let inner = self.inner.clone();
-
-        let builder = self.builder.take().expect("server has been stopped");
-
-        builder
-            .serve(make_service_fn(move |_conn| {
-                let inner = inner.clone();
-
-                future::ready(Ok::<_, Infallible>(service_fn(move |req| {
-                    let inner = inner.clone();
-
-                    async move { inner.handle(req).await }
-                })))
-            }))
-            .await?;
-
-        Ok(())*/
     }
 }
