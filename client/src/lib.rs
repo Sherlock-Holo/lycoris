@@ -217,7 +217,7 @@ fn set_proxy_addr(
 
     if *addr.ip() == Ipv4Addr::new(0, 0, 0, 0) {
         // when set 0.0.0.0, we need bpf use 127.0.0.1 to connect local
-        addr.set_ip(Ipv4Addr::new(127, 0, 0, 1));
+        addr.set_ip(Ipv4Addr::LOCALHOST);
     }
 
     let proxy_addr = ShareIpv4Addr {
@@ -245,7 +245,7 @@ fn set_proxy_addr(
 
     if *addr_v6.ip() == Ipv6Addr::from([0, 0, 0, 0, 0, 0, 0, 0]) {
         // when set 0.0.0.0, we need bpf use ::1 to connect local
-        addr_v6.set_ip(Ipv6Addr::from([0, 0, 0, 0, 0, 0, 0, 1]));
+        addr_v6.set_ip(Ipv6Addr::LOCALHOST);
     }
 
     let proxy_addr = ShareIpv6Addr {

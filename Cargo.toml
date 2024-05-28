@@ -1,3 +1,24 @@
 [workspace]
-members = ["server", "bpf", "client", "share"]
+members = ["server", "bpf", "client", "share", "protocol"]
 resolver = "2"
+
+[workspace.dependencies]
+anyhow = "1"
+bytes = "1"
+futures-util = "0.3"
+futures-channel = "0.3"
+futures-rustls = "0.26"
+http = "1"
+http-body-util = "0.1"
+hyper = "1"
+hyper-rustls = "0.26"
+hyper-util = "0.1"
+rustls = "0.23"
+rustls-native-certs = "0.7"
+rustls-pemfile = "2"
+tokio-rustls = "0.25"
+tokio-util = "0.7"
+totp-rs = "5"
+tower-service = "0.3"
+tracing = "0.1"
+trait-make = "0.1"
