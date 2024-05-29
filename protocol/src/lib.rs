@@ -1,5 +1,3 @@
-#![feature(impl_trait_in_assoc_type)]
-
 use std::net::SocketAddr;
 
 use bytes::{BufMut, Bytes, BytesMut};
@@ -22,8 +20,8 @@ impl From<SocketAddr> for DomainOrSocketAddr {
     }
 }
 
-/// encode addr to \[addr_type:1, addr:variant, port:2\]
-pub fn encode_addr(addr: impl Into<DomainOrSocketAddr>) -> Bytes {
+/// Encode addr to \[addr_type:1, addr:variant, port:2\]
+fn encode_addr(addr: impl Into<DomainOrSocketAddr>) -> Bytes {
     match addr.into() {
         DomainOrSocketAddr::Domain { domain, port } => {
             let mut buf = BytesMut::with_capacity(1 + 2 + domain.as_bytes().len() + 2);

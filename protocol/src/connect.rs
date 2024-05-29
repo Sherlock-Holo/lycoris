@@ -1,29 +1,29 @@
 use core::slice;
 use std::convert::Infallible;
 use std::future::Future;
-use std::io::ErrorKind;
+use std::io::{self, ErrorKind};
 use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{ready, Context, Poll};
-use std::{error, io};
 
 use anyhow::Context as _;
 use bytes::Bytes;
 use futures_channel::mpsc;
 use futures_rustls::client::TlsStream;
-use futures_rustls::pki_types::ServerName;
+use futures_rustls::pki_types::{DnsName, ServerName};
+pub use futures_rustls::rustls::ClientConfig;
 use futures_rustls::TlsConnector;
-use futures_util::{AsyncRead, AsyncWrite};
+use futures_util::future::BoxFuture;
+use futures_util::stream::FuturesUnordered;
+use futures_util::{AsyncRead, AsyncWrite, StreamExt};
 use http::{Request, StatusCode, Uri, Version};
 use http_body_util::combinators::BoxBody;
 use http_body_util::StreamBody;
 use hyper::body::Frame;
 use hyper::rt::{ReadBufCursor, Timer};
-use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use hyper_util::client::legacy::connect::{Connected, Connection};
 use hyper_util::client::legacy::Client;
-use tokio_rustls::rustls::ClientConfig;
 use tokio_util::io::{SinkWriter, StreamReader};
 use tower_service::Service;
 use tracing::{error, info, instrument};
@@ -42,38 +42,33 @@ pub type ReadWrite = (
 );
 
 #[derive(Debug)]
-pub struct HyperConnectorConfig<HC, E, T> {
+pub struct HyperConnectorConfig<TC, DR, E, T> {
     pub tls_client_config: ClientConfig,
     pub remote_domain: String,
     pub remote_port: u16,
     pub auth: Auth,
     pub token_header: String,
-    pub http_connector: HC,
+    pub dns_resolver: DR,
+    pub tcp_connector: TC,
     pub executor: E,
     pub timer: T,
 }
 
 #[derive(Debug, Clone)]
-pub struct HyperConnector<HC> {
-    inner: Arc<HyperConnectorInner<HC>>,
+pub struct HyperConnector<DR, TC> {
+    inner: Arc<HyperConnectorInner<DR, TC>>,
 }
 
 #[derive(Debug)]
-struct HyperConnectorInner<HC> {
-    client: Client<HttpsConnector<HC>, BoxBody<Bytes, Infallible>>,
+struct HyperConnectorInner<TC, DR> {
+    client: Client<GenericHttpsConnector<TC, DR>, BoxBody<Bytes, Infallible>>,
     remote_addr: Uri,
     token_generator: Auth,
     token_header: String,
 }
 
-impl<HC> HyperConnector<HC>
-where
-    HC: Service<Uri> + Clone + Send + Sync + 'static,
-    HC::Response: Connection + hyper::rt::Read + hyper::rt::Write + Send + Unpin + 'static,
-    HC::Future: Send + 'static,
-    HC::Error: Into<Box<dyn error::Error + Send + Sync>>,
-{
-    pub fn new<E, T>(config: HyperConnectorConfig<HC, E, T>) -> anyhow::Result<Self>
+impl<DR: DnsResolver + Sync + 'static, TC: TcpConnector + Sync + 'static> HyperConnector<TC, DR> {
+    pub fn new<E, T>(config: HyperConnectorConfig<TC, DR, E, T>) -> anyhow::Result<Self>
     where
         E: hyper::rt::Executor<Pin<Box<dyn Future<Output = ()> + Send>>>
             + Send
@@ -82,12 +77,11 @@ where
             + 'static,
         T: Timer + Send + Sync + 'static,
     {
-        let https_connector = HttpsConnectorBuilder::new()
-            .with_tls_config(config.tls_client_config)
-            .https_only()
-            .with_server_name(config.remote_domain.clone())
-            .enable_http2()
-            .wrap_connector(config.http_connector);
+        let https_connector = GenericHttpsConnector {
+            dns_resolver: config.dns_resolver,
+            tcp_connector: config.tcp_connector,
+            tls_connector: TlsConnector::from(Arc::new(config.tls_client_config)),
+        };
 
         let client = Client::builder(config.executor)
             .timer(config.timer)
@@ -155,40 +149,46 @@ where
 
 #[trait_make::make(Send)]
 pub trait TcpConnector: Clone {
-    type ConnectedTcpStream: AsyncRead + AsyncWrite + Unpin;
+    type ConnectedTcpStream: AsyncRead + AsyncWrite + Connection + Send + Sync + Unpin + 'static;
 
     async fn connect(&mut self, addr: SocketAddr) -> io::Result<Self::ConnectedTcpStream>;
 }
 
 #[trait_make::make(Send)]
 pub trait DnsResolver: Clone {
-    async fn resolve(&mut self, name: &str) -> io::Result<IpAddr>;
+    async fn resolve(&mut self, name: &str) -> io::Result<impl IntoIterator<Item = IpAddr>>;
 }
 
+#[derive(Clone)]
 struct GenericHttpsConnector<TC, DR> {
     dns_resolver: DR,
     tcp_connector: TC,
     tls_connector: TlsConnector,
 }
 
-impl<TC: TcpConnector, DR: DnsResolver> Service<Uri> for GenericHttpsConnector<TC, DR> {
+impl<TC: TcpConnector + Sync + 'static, DR: DnsResolver + 'static> Service<Uri>
+    for GenericHttpsConnector<TC, DR>
+{
     type Response = GenericTlsStream<TC::ConnectedTcpStream>;
     type Error = io::Error;
-    type Future = impl Future<Output = Result<Self::Response, Self::Error>>;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
     }
 
     fn call(&mut self, req: Uri) -> Self::Future {
-        let mut dns_resolver = self.dns_resolver.clone();
+        let dns_resolver = self.dns_resolver.clone();
         let mut tcp_connector = self.tcp_connector.clone();
         let tls_connector = self.tls_connector.clone();
 
-        async move {
+        Box::pin(async move {
             let host = req
                 .host()
-                .ok_or_else(|| io::Error::new(ErrorKind::Other, "miss host"))?;
+                .ok_or_else(|| io::Error::new(ErrorKind::Other, "miss host"))?
+                .trim_start_matches('[')
+                .trim_end_matches(']');
+
             let port = req.port_u16().unwrap_or(443);
 
             let server_name =
@@ -203,9 +203,7 @@ impl<TC: TcpConnector, DR: DnsResolver> Service<Uri> for GenericHttpsConnector<T
                 }
 
                 ServerName::DnsName(dns_name) => {
-                    let ip = dns_resolver.resolve(dns_name.as_ref()).await?;
-
-                    tcp_connector.connect(SocketAddr::new(ip, port)).await?
+                    Self::connect_dns_name(dns_resolver, &tcp_connector, dns_name, port).await?
                 }
 
                 _ => {
@@ -219,7 +217,41 @@ impl<TC: TcpConnector, DR: DnsResolver> Service<Uri> for GenericHttpsConnector<T
             let tls_stream = tls_connector.connect(server_name, tcp_stream).await?;
 
             Ok(GenericTlsStream { tls_stream })
+        })
+    }
+}
+
+impl<TC: TcpConnector, DR: DnsResolver> GenericHttpsConnector<TC, DR> {
+    async fn connect_dns_name(
+        mut dns_resolver: DR,
+        tcp_connector: &TC,
+        dns_name: &DnsName<'_>,
+        port: u16,
+    ) -> io::Result<TC::ConnectedTcpStream> {
+        let ip = dns_resolver.resolve(dns_name.as_ref()).await?;
+        let mut futs = FuturesUnordered::new();
+        for ip in ip.into_iter() {
+            let mut tcp_connector = tcp_connector.clone();
+            futs.push(async move { tcp_connector.connect(SocketAddr::new(ip, port)).await });
         }
+
+        assert!(
+            !futs.is_empty(),
+            "dns name {dns_name:?} resolve ip list empty"
+        );
+
+        let mut last_err = None;
+        while let Some(res) = futs.next().await {
+            match res {
+                Err(err) => {
+                    last_err = Some(err);
+                }
+
+                Ok(tcp_stream) => return Ok(tcp_stream),
+            }
+        }
+
+        Err(last_err.unwrap())
     }
 }
 

@@ -12,11 +12,7 @@ futures-rustls = { workspace = true }
 http = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true, features = ["http2", "client"] }
-hyper-rustls = { workspace = true, features = ["http2", "logging"] }
 hyper-util = { workspace = true, features = ["client-legacy", "http2", "tokio"] }
-rustls-native-certs = { workspace = true }
-rustls-pemfile = { workspace = true }
-tokio-rustls = { workspace = true }
 tokio-util = { workspace = true, features = ["io"] }
 totp-rs = { workspace = true, features = ["otpauth"] }
 tower-service = { workspace = true }
