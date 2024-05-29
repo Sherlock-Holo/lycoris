@@ -86,8 +86,8 @@ where
     IO: AsyncRead + AsyncWrite + Unpin + 'static,
     A: Stream<Item = io::Result<IO>> + Unpin,
     E: Clone,
-    for<Fut> E: Executor<Fut>,
     D: DnsResolver + Clone + 'static,
+    for<Fut> E: Executor<Fut>,
 {
     pub fn listen(self) -> (ListenTask, HyperAcceptor) {
         let Self {
@@ -290,7 +290,7 @@ struct TlsAcceptor<A> {
 }
 
 impl<A> TlsAcceptor<A> {
-    pub fn new(tcp_acceptor: A, server_tls_config: ServerConfig) -> Self {
+    fn new(tcp_acceptor: A, server_tls_config: ServerConfig) -> Self {
         Self {
             tcp_acceptor,
             tls_acceptor: futures_rustls::TlsAcceptor::from(Arc::new(server_tls_config)),
@@ -374,9 +374,6 @@ pub enum Error {
 
     #[error(transparent)]
     Other(Box<dyn std::error::Error + Send + Sync + 'static>),
-
-    #[error("build auth failed: {0:?}")]
-    Auth(totp_rs::TotpUrlError),
 
     #[error(transparent)]
     Aborted(#[from] Aborted),

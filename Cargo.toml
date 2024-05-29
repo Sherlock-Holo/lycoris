@@ -9,6 +9,7 @@ event-listener = "5"
 futures-util = "0.3"
 futures-channel = "0.3"
 futures-rustls = "0.26"
+hickory-resolver = { version = "0.24", default-features = false }
 http = "1"
 http-body-util = "0.1"
 hyper = "1"

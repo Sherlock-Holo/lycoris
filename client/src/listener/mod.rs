@@ -1,14 +1,13 @@
+use protocol::DomainOrSocketAddr;
 use tokio::io;
 use tokio::io::{AsyncRead, AsyncWrite, BufStream, ReadHalf, WriteHalf};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::TcpStream;
 
-use crate::addr::domain_or_socket_addr::DomainOrSocketAddr;
-
 pub mod bpf;
 
-#[trait_variant::make(Listener: Send)]
-pub trait LocalListener {
+#[trait_variant::make(Send)]
+pub trait Listener {
     type Stream: Split;
 
     async fn accept(&mut self) -> anyhow::Result<(Self::Stream, DomainOrSocketAddr)>;

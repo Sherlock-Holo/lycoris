@@ -1,90 +1,292 @@
-use std::net::SocketAddr;
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::time::Duration;
 
-use bytes::{BufMut, Bytes, BytesMut};
-pub use dst_addr::DstAddrLookup;
+use aya::maps::{HashMap, MapData, MapError};
+use aya::Pod;
+use share::helper::ArrayExt;
+use tap::TapFallible;
+use tokio::sync::Mutex;
+use tokio::time;
+use tracing::error;
 
-use self::domain_or_socket_addr::DomainOrSocketAddr;
+use crate::bpf_share::{
+    ConnectedIpv4Addr, ConnectedIpv6Addr, Ipv4Addr as ShareIpv4Addr, Ipv6Addr as ShareIpv6Addr,
+};
 
-pub mod domain_or_socket_addr;
-mod dst_addr;
+pub trait LimitedBpfHashMap<K: Pod, V: Pod> {
+    fn get(&self, key: &K) -> Result<V, MapError>;
 
-/// encode addr to \[addr_type:1, addr:variant, port:2\]
-pub fn encode_addr(addr: impl Into<DomainOrSocketAddr>) -> Bytes {
-    match addr.into() {
-        DomainOrSocketAddr::Domain { domain, port } => {
-            let mut buf = BytesMut::with_capacity(1 + 2 + domain.as_bytes().len() + 2);
+    fn remove(&mut self, key: &K) -> Result<(), MapError>;
+}
 
-            buf.put_u8(1);
-            buf.put_u16(domain.as_bytes().len() as _);
-            buf.put(domain.as_bytes());
-            buf.put_u16(port);
+impl<K: Pod, V: Pod> LimitedBpfHashMap<K, V> for HashMap<MapData, K, V> {
+    fn get(&self, key: &K) -> Result<V, MapError> {
+        HashMap::<MapData, K, V>::get(self, key, 0)
+    }
 
-            buf.freeze()
+    fn remove(&mut self, key: &K) -> Result<(), MapError> {
+        HashMap::<MapData, K, V>::remove(self, key)
+    }
+}
+
+pub struct DstAddrLookup<Map> {
+    dst_addr_map: Mutex<Map>,
+}
+
+impl<Map> DstAddrLookup<Map> {
+    pub fn new(map: Map) -> Self {
+        Self {
+            dst_addr_map: Mutex::new(map),
         }
-        DomainOrSocketAddr::SocketAddr(addr) => match addr {
-            SocketAddr::V4(v4_addr) => {
-                let mut buf = BytesMut::with_capacity(1 + 4 + 2);
+    }
+}
 
-                buf.put_u8(4);
-                buf.put(v4_addr.ip().octets().as_slice());
-                buf.put_u16(v4_addr.port());
+impl<Map: LimitedBpfHashMap<ConnectedIpv4Addr, ShareIpv4Addr>> DstAddrLookup<Map> {
+    pub async fn lookup(
+        &self,
+        connected_addr: &ConnectedIpv4Addr,
+        max_retry: usize,
+    ) -> anyhow::Result<Option<SocketAddr>> {
+        for _ in 0..max_retry {
+            let mut map = self.dst_addr_map.lock().await;
+            match map.get(connected_addr) {
+                Err(MapError::KeyNotFound) => {
+                    time::sleep(Duration::from_millis(50)).await;
 
-                buf.freeze()
+                    continue;
+                }
+
+                Err(err) => {
+                    error!(%err, ?connected_addr, "get dst addr from connected v4 addr failed");
+
+                    return Err(err.into());
+                }
+
+                Ok(dst_ipv4_addr) => {
+                    let dst_addr = SocketAddr::V4(SocketAddrV4::new(
+                        Ipv4Addr::from(dst_ipv4_addr.addr),
+                        dst_ipv4_addr.port,
+                    ));
+
+                    map.remove(connected_addr).tap_err(
+                        |err| error!(%err, ?connected_addr, "remove dst addr by v4 addr failed"),
+                    )?;
+
+                    return Ok(Some(dst_addr));
+                }
             }
+        }
 
-            SocketAddr::V6(v6_addr) => {
-                let mut buf = BytesMut::with_capacity(1 + 16 + 2);
+        error!(?connected_addr, "dst addr not found");
 
-                buf.put_u8(6);
-                buf.put(v6_addr.ip().octets().as_slice());
-                buf.put_u16(v6_addr.port());
+        Ok(None)
+    }
+}
 
-                buf.freeze()
+impl<Map: LimitedBpfHashMap<ConnectedIpv6Addr, ShareIpv6Addr>> DstAddrLookup<Map> {
+    pub async fn lookup_v6(
+        &self,
+        connected_addr: &ConnectedIpv6Addr,
+        max_retry: usize,
+    ) -> anyhow::Result<Option<SocketAddr>> {
+        for _ in 0..max_retry {
+            let mut map = self.dst_addr_map.lock().await;
+            match map.get(connected_addr) {
+                Err(MapError::KeyNotFound) => {
+                    time::sleep(Duration::from_millis(50)).await;
+
+                    continue;
+                }
+
+                Err(err) => {
+                    error!(%err, ?connected_addr, "get dst addr from connected v6 addr failed");
+
+                    return Err(err.into());
+                }
+
+                Ok(dst_ipv6_addr) => {
+                    let dst_addr = SocketAddr::V6(SocketAddrV6::new(
+                        Ipv6Addr::from(dst_ipv6_addr.addr.swap_bytes()),
+                        dst_ipv6_addr.port,
+                        0,
+                        0,
+                    ));
+
+                    map.remove(connected_addr).tap_err(
+                        |err| error!(%err, ?connected_addr, "remove dst addr by v4 addr failed"),
+                    )?;
+
+                    return Ok(Some(dst_addr));
+                }
             }
-        },
+        }
+
+        error!(?connected_addr, "dst addr not found");
+
+        Ok(None)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::net::Ipv6Addr;
+    use std::collections::HashMap;
+    use std::hash::Hash;
     use std::str::FromStr;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use super::*;
 
-    #[test]
-    fn encode_v4() {
-        let data = encode_addr(SocketAddr::from_str("127.0.0.1:80").unwrap());
-
-        let mut correct = BytesMut::from(&[4, 127, 0, 0, 1][..]);
-        correct.put_u16(80);
-
-        assert_eq!(data, correct);
+    struct MockBpfMap<K, V> {
+        map: HashMap<K, V>,
+        need_retry: AtomicUsize,
     }
 
-    #[test]
-    fn encode_v6() {
-        let data = encode_addr(SocketAddr::from_str("[::1]:80").unwrap());
+    impl<K: Pod + Hash + Eq, V: Pod> LimitedBpfHashMap<K, V> for MockBpfMap<K, V> {
+        fn get(&self, key: &K) -> Result<V, MapError> {
+            if self.need_retry.load(Ordering::Acquire) == 0 {
+                return self.map.get(key).ok_or(MapError::KeyNotFound).copied();
+            }
 
-        let mut correct = BytesMut::from(&[6][..]);
-        correct.put(Ipv6Addr::from_str("::1").unwrap().octets().as_slice());
-        correct.put_u16(80);
+            if self.need_retry.fetch_sub(1, Ordering::AcqRel) - 1 > 0 {
+                return Err(MapError::KeyNotFound);
+            }
 
-        assert_eq!(data, correct);
+            self.map.get(key).ok_or(MapError::KeyNotFound).copied()
+        }
+
+        fn remove(&mut self, key: &K) -> Result<(), MapError> {
+            self.map.remove(key);
+
+            Ok(())
+        }
     }
 
-    #[test]
-    fn encode_domain() {
-        let data = encode_addr(DomainOrSocketAddr::Domain {
-            domain: "www.example.com".to_string(),
-            port: 80,
-        });
+    #[tokio::test]
+    async fn load_addr_immediately() {
+        let mut bpf_map = MockBpfMap {
+            map: HashMap::<ConnectedIpv4Addr, ShareIpv4Addr>::new(),
+            need_retry: AtomicUsize::new(0),
+        };
 
-        let mut correct = BytesMut::from(&[1][..]);
-        correct.put_u16("www.example.com".as_bytes().len() as _);
-        correct.put("www.example.com".as_bytes());
-        correct.put_u16(80);
+        let connected_ipv4addr = ConnectedIpv4Addr {
+            sport: 80,
+            dport: 80,
+            saddr: [127, 0, 0, 1],
+            daddr: [127, 0, 0, 2],
+        };
 
-        assert_eq!(data, correct);
+        bpf_map.map.insert(
+            connected_ipv4addr,
+            ShareIpv4Addr {
+                addr: [127, 0, 0, 2],
+                port: 8080,
+                _padding: [0; 2],
+            },
+        );
+
+        let dst_addr_lookup = DstAddrLookup::new(bpf_map);
+
+        assert_eq!(
+            dst_addr_lookup
+                .lookup(&connected_ipv4addr, 3)
+                .await
+                .unwrap()
+                .unwrap(),
+            SocketAddr::from_str("127.0.0.2:8080").unwrap()
+        );
+
+        assert!(dst_addr_lookup.dst_addr_map.lock().await.map.is_empty());
+    }
+
+    #[tokio::test]
+    async fn load_addr_after_retry() {
+        let mut bpf_map = MockBpfMap {
+            map: HashMap::<ConnectedIpv4Addr, ShareIpv4Addr>::new(),
+            need_retry: AtomicUsize::new(2),
+        };
+
+        let connected_ipv4addr = ConnectedIpv4Addr {
+            sport: 80,
+            dport: 80,
+            saddr: [127, 0, 0, 1],
+            daddr: [127, 0, 0, 2],
+        };
+
+        bpf_map.map.insert(
+            connected_ipv4addr,
+            ShareIpv4Addr {
+                addr: [127, 0, 0, 2],
+                port: 8080,
+                _padding: [0; 2],
+            },
+        );
+
+        let dst_addr_lookup = DstAddrLookup::new(bpf_map);
+
+        assert_eq!(
+            dst_addr_lookup
+                .lookup(&connected_ipv4addr, 3)
+                .await
+                .unwrap()
+                .unwrap(),
+            SocketAddr::from_str("127.0.0.2:8080").unwrap()
+        );
+
+        assert!(dst_addr_lookup.dst_addr_map.lock().await.map.is_empty());
+    }
+
+    #[tokio::test]
+    async fn load_addr_timeout() {
+        let mut bpf_map = MockBpfMap {
+            map: HashMap::<ConnectedIpv4Addr, ShareIpv4Addr>::new(),
+            need_retry: AtomicUsize::new(5),
+        };
+
+        let connected_ipv4addr = ConnectedIpv4Addr {
+            sport: 80,
+            dport: 80,
+            saddr: [127, 0, 0, 1],
+            daddr: [127, 0, 0, 2],
+        };
+
+        bpf_map.map.insert(
+            connected_ipv4addr,
+            ShareIpv4Addr {
+                addr: [127, 0, 0, 2],
+                port: 8080,
+                _padding: [0; 2],
+            },
+        );
+
+        let dst_addr_lookup = DstAddrLookup::new(bpf_map);
+
+        assert!(dst_addr_lookup
+            .lookup(&connected_ipv4addr, 3)
+            .await
+            .unwrap()
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn load_addr_not_exists() {
+        let bpf_map = MockBpfMap {
+            map: HashMap::<ConnectedIpv4Addr, ShareIpv4Addr>::new(),
+            need_retry: AtomicUsize::new(2),
+        };
+
+        let connected_ipv4addr = ConnectedIpv4Addr {
+            sport: 80,
+            dport: 80,
+            saddr: [127, 0, 0, 1],
+            daddr: [127, 0, 0, 2],
+        };
+
+        let dst_addr_lookup = DstAddrLookup::new(bpf_map);
+
+        assert!(dst_addr_lookup
+            .lookup(&connected_ipv4addr, 3)
+            .await
+            .unwrap()
+            .is_none());
     }
 }

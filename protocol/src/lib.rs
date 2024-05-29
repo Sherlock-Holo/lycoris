@@ -3,11 +3,13 @@
 use std::io;
 use std::net::{IpAddr, SocketAddr};
 
+pub use accept::{HyperAcceptor, HyperListener};
 use bytes::{BufMut, Bytes, BytesMut};
+pub use connect::{HyperConnector, HyperConnectorConfig};
 
 mod abort;
 pub mod accept;
-mod auth;
+pub mod auth;
 pub mod connect;
 mod h2_config;
 mod hyper_body;

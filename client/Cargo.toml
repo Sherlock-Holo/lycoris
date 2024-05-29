@@ -8,6 +8,13 @@ rust-version = "1.75"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+hickory-resolver = { workspace = true, features = ["default", "system-config"] }
+futures-rustls = { workspace = true }
+tokio-util = { workspace = true, features = ["compat", "io"] }
+
+protocol = { path = "../protocol" }
+
+
 anyhow = "1"
 bytes = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "fs", "sync", "time"] }
@@ -15,7 +22,6 @@ tap = "1"
 
 # async
 tokio-stream = { version = "0.1", features = ["time", "io-util", "net"] }
-tokio-util = { version = "0.7", features = ["io"] }
 futures-util = { version = "0.3", features = ["io"] }
 futures-channel = { version = "0.3", features = ["sink"] }
 trait-variant = "0.1"
@@ -39,7 +45,6 @@ hyper-util = { version = "0.1", features = ["client-legacy", "http2", "tokio"] }
 http-body-util = "0.1"
 
 # tls
-tokio-rustls = "0.25"
 rustls-pemfile = "2"
 rustls-native-certs = "0.7"
 
@@ -50,7 +55,6 @@ clap = { version = "4", features = ["derive", "color", "suggestions"] }
 
 # ip addr
 cidr = "0.2"
-hickory-resolver = "0.24"
 
 share = { path = "../share" }
 

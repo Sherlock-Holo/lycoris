@@ -28,13 +28,13 @@ use tokio_util::io::{SinkWriter, StreamReader};
 use tower_service::Service;
 use tracing::{error, info, instrument};
 
-use super::{DnsResolver, DomainOrSocketAddr};
 use crate::auth::Auth;
 use crate::h2_config::{
     INITIAL_CONNECTION_WINDOW_SIZE, INITIAL_WINDOW_SIZE, MAX_FRAME_SIZE, PING_INTERVAL,
     PING_TIMEOUT,
 };
 use crate::hyper_body::{BodyStream, SinkBodySender};
+use crate::{DnsResolver, DomainOrSocketAddr};
 
 pub type ReadWrite = (
     StreamReader<BodyStream, Bytes>,
@@ -55,8 +55,8 @@ pub struct HyperConnectorConfig<TC, DR, E, T> {
 }
 
 #[derive(Debug, Clone)]
-pub struct HyperConnector<DR, TC> {
-    inner: Arc<HyperConnectorInner<DR, TC>>,
+pub struct HyperConnector<TC, DR> {
+    inner: Arc<HyperConnectorInner<TC, DR>>,
 }
 
 #[derive(Debug)]
