@@ -2,7 +2,7 @@ use core::slice;
 use std::convert::Infallible;
 use std::future::Future;
 use std::io::{self, ErrorKind};
-use std::net::{IpAddr, SocketAddr};
+use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{ready, Context, Poll};
@@ -28,7 +28,7 @@ use tokio_util::io::{SinkWriter, StreamReader};
 use tower_service::Service;
 use tracing::{error, info, instrument};
 
-use super::DomainOrSocketAddr;
+use super::{DnsResolver, DomainOrSocketAddr};
 use crate::auth::Auth;
 use crate::h2_config::{
     INITIAL_CONNECTION_WINDOW_SIZE, INITIAL_WINDOW_SIZE, MAX_FRAME_SIZE, PING_INTERVAL,
@@ -152,11 +152,6 @@ pub trait TcpConnector: Clone {
     type ConnectedTcpStream: AsyncRead + AsyncWrite + Connection + Send + Sync + Unpin + 'static;
 
     async fn connect(&mut self, addr: SocketAddr) -> io::Result<Self::ConnectedTcpStream>;
-}
-
-#[trait_make::make(Send)]
-pub trait DnsResolver: Clone {
-    async fn resolve(&mut self, name: &str) -> io::Result<impl IntoIterator<Item = IpAddr>>;
 }
 
 #[derive(Clone)]

@@ -6,15 +6,18 @@ edition = "2021"
 [dependencies]
 anyhow = { workspace = true }
 bytes = { workspace = true }
+event-listener = { workspace = true }
 futures-util = { workspace = true, features = ["io", "sink"] }
 futures-channel = { workspace = true, features = ["sink"] }
 futures-rustls = { workspace = true }
 http = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true, features = ["http2", "client"] }
-hyper-util = { workspace = true, features = ["client-legacy", "http2", "tokio"] }
+hyper-util = { workspace = true, features = ["client-legacy", "http2", "server"] }
+pin-project = { workspace = true }
 tokio-util = { workspace = true, features = ["io"] }
 totp-rs = { workspace = true, features = ["otpauth"] }
+thiserror = { workspace = true }
 tower-service = { workspace = true }
 tracing = { workspace = true }
 trait-make = { workspace = true }

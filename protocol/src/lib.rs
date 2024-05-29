@@ -1,11 +1,21 @@
-use std::net::SocketAddr;
+#![feature(non_lifetime_binders)]
+
+use std::io;
+use std::net::{IpAddr, SocketAddr};
 
 use bytes::{BufMut, Bytes, BytesMut};
 
+mod abort;
+pub mod accept;
 mod auth;
 pub mod connect;
 mod h2_config;
 mod hyper_body;
+
+#[trait_make::make(Send)]
+pub trait DnsResolver: Clone {
+    async fn resolve(&mut self, name: &str) -> io::Result<impl IntoIterator<Item = IpAddr>>;
+}
 
 #[derive(Debug, Clone)]
 pub enum DomainOrSocketAddr {
