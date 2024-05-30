@@ -31,7 +31,8 @@ use crate::args::Args;
 use crate::bpf_share::{Ipv4Addr as ShareIpv4Addr, Ipv6Addr as ShareIpv6Addr};
 pub use crate::client::Client;
 use crate::config::Config;
-use crate::connect::hyper::HyperConnector;
+#[doc(hidden)]
+pub use crate::connect::hyper::HyperConnector;
 pub use crate::listener::bpf::BpfListener;
 pub use crate::owned_link::OwnedLink;
 

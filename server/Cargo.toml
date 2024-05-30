@@ -29,6 +29,7 @@ protocol = { path = "../protocol" }
 share = { path = "../share" }
 
 [dev-dependencies]
-hyper-rustls = { version = "0.26", features = ["http2", "logging"] }
-hyper = { version = "1", features = ["client"] }
-hyper-util = { version = "0.1", features = ["client"] }
+hyper = { workspace = true, features = ["client"] }
+hyper-rustls = { version = "0.27", features = ["http2", "logging"] }
+hyper-util = { workspace = true, features = ["client"] }
+totp-rs = { workspace = true }

@@ -14,12 +14,16 @@ use aya::Bpf;
 use aya_log::BpfLogger;
 use bytes::Bytes;
 use cidr::Ipv4Inet;
+use futures_rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
+use futures_rustls::rustls::{ClientConfig, RootCertStore, ServerConfig};
+use futures_rustls::TlsAcceptor;
 use futures_util::StreamExt;
 use h2::server;
 use http::{HeaderMap, Response};
 use lycoris_client::bpf_map_name::*;
 use lycoris_client::bpf_share::{Ipv4Addr, Ipv6Addr};
-use lycoris_client::{BpfListener, Client, HyperConnector, OwnedLink, TokenGenerator};
+use lycoris_client::{BpfListener, Client, HyperConnector, OwnedLink};
+use protocol::auth::Auth;
 use rustix::process::getuid;
 use share::helper::Ipv6AddrExt;
 use share::log::init_log;
@@ -27,9 +31,7 @@ use tokio::fs;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio::net::{TcpListener, TcpStream};
-use tokio_rustls::rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
-use tokio_rustls::rustls::{ClientConfig, RootCertStore, ServerConfig};
-use tokio_rustls::TlsAcceptor;
+use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::info;
 use tracing_log::LogTracer;
 
@@ -81,11 +83,11 @@ async fn main() {
 
     let listener = load_listener(&mut bpf, listen_addr, listen_addr_v6).await;
     let connector = load_connector(
-        "localhost",
+        "localhost".to_string(),
         h2_server_addr.port(),
         Path::new("tests/ca.cert"),
-        TOKEN_SECRET,
-        TOKEN_HEADER,
+        TOKEN_SECRET.to_string(),
+        TOKEN_HEADER.to_string(),
     )
     .await;
 
@@ -126,10 +128,8 @@ async fn start_server() -> SocketAddr {
 
     tokio::spawn(async move {
         let (tcp_stream, _) = listener.accept().await.unwrap();
-
-        let tls_stream = tls_acceptor.accept(tcp_stream).await.unwrap();
-
-        let mut connection = server::handshake(tls_stream).await.unwrap();
+        let tls_stream = tls_acceptor.accept(tcp_stream.compat()).await.unwrap();
+        let mut connection = server::handshake(tls_stream.compat()).await.unwrap();
 
         while let Some(result) = connection.accept().await {
             let (recv_stream, mut send_stream) = result.unwrap();
@@ -171,14 +171,13 @@ async fn load_keys(path: &Path) -> Vec<PrivatePkcs8KeyDer> {
 }
 
 async fn load_connector(
-    remote_domain: &str,
+    remote_domain: String,
     remote_port: u16,
     ca_cert: &Path,
-    token_secret: &str,
-    token_header: &str,
+    token_secret: String,
+    token_header: String,
 ) -> HyperConnector {
     let mut root_cert_store = RootCertStore::empty();
-
     let ca_cert = fs::read(ca_cert).await.unwrap();
 
     for ca_certs in rustls_pemfile::certs(&mut ca_cert.as_slice()) {
@@ -188,14 +187,14 @@ async fn load_connector(
     let client_config = ClientConfig::builder()
         .with_root_certificates(root_cert_store)
         .with_no_client_auth();
-    let token_generator = TokenGenerator::new(token_secret.to_string(), None).unwrap();
+    let auth = Auth::new(token_secret, None).unwrap();
 
     HyperConnector::new(
         client_config,
         remote_domain,
         remote_port,
-        token_generator,
         token_header,
+        auth,
     )
     .unwrap()
 }
