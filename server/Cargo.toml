@@ -1,44 +1,35 @@
 [package]
 name = "lycoris-server"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-thiserror = "1"
-bytes = "1"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "fs"] }
-tokio-util = { version = "0.7", features = ["io"] }
-futures-util = { version = "0.3", features = ["io"] }
-futures-channel = "0.3"
-tap = "1"
+bytes = { workspace = true }
+clap = { workspace = true, features = ["derive", "color", "suggestions"] }
+futures-channel = { workspace = true }
+futures-rustls = { workspace = true }
+futures-util = { workspace = true, features = ["io"] }
+http = { workspace = true }
+hyper = { workspace = true, features = ["http2", "http1", "server"] }
+http-body-util = { workspace = true }
+hyper-util = { workspace = true, features = ["server", "server-auto", "http1", "http2", "tokio"] }
+rustls-pemfile = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_yaml = { workspace = true }
+tap = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net", "io-util", "fs"] }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+tokio-util = { workspace = true, features = ["compat"] }
 
-# log
-tracing = "0.1"
-
-# auth
-totp-rs = { version = "5", features = ["otpauth"] }
-
-# http/2
-http = "1"
-hyper = { version = "1", features = ["http2", "http1", "server"] }
-hyper-util = { version = "0.1", features = ["server", "server-auto", "http1", "http2", "tokio"] }
-http-body-util = "0.1"
-
-# tls
-tokio-rustls = "0.25"
-rustls-pemfile = "2"
-
-# config and args
-serde = { version = "1", features = ["derive"] }
-serde_yaml = "0.9"
-clap = { version = "4", features = ["derive", "color", "suggestions"] }
-
+protocol = { path = "../protocol" }
 share = { path = "../share" }
 
 [dev-dependencies]
-hyper-rustls = { version = "0.26", features = ["http2", "logging"] }
-hyper = { version = "1", features = ["client"] }
-hyper-util = { version = "0.1", features = ["client"] }
+hyper = { workspace = true, features = ["client"] }
+hyper-rustls = { version = "0.27", features = ["http2", "logging"] }
+hyper-util = { workspace = true, features = ["client"] }
+totp-rs = { workspace = true }

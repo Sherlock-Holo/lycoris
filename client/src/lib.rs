@@ -1,3 +1,5 @@
+#![feature(impl_trait_in_assoc_type)]
+
 use std::ffi::CString;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6};
 use std::path::Path;
@@ -11,14 +13,15 @@ use aya::{maps, Bpf};
 use aya_log::BpfLogger;
 use cidr::{Ipv4Inet, Ipv6Inet};
 use clap::Parser;
+use futures_rustls::rustls::{ClientConfig, RootCertStore};
 use futures_util::{future, StreamExt};
 use hickory_resolver::error::ResolveErrorKind;
 use hickory_resolver::AsyncResolver;
+use protocol::auth::Auth;
 use share::helper::Ipv6AddrExt;
 use share::log::init_log;
 use tokio::fs::{self, File};
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tokio_stream::wrappers::LinesStream;
 use tracing::{info, warn};
 use tracing_log::LogTracer;
@@ -28,10 +31,10 @@ use crate::args::Args;
 use crate::bpf_share::{Ipv4Addr as ShareIpv4Addr, Ipv6Addr as ShareIpv6Addr};
 pub use crate::client::Client;
 use crate::config::Config;
+#[doc(hidden)]
 pub use crate::connect::hyper::HyperConnector;
 pub use crate::listener::bpf::BpfListener;
 pub use crate::owned_link::OwnedLink;
-pub use crate::token::TokenGenerator;
 
 mod addr;
 mod args;
@@ -42,7 +45,6 @@ mod config;
 mod connect;
 mod listener;
 mod owned_link;
-mod token;
 
 pub async fn run() -> anyhow::Result<()> {
     let args = Args::parse();
@@ -121,11 +123,11 @@ async fn run_bpf(args: Args, config: Config) -> anyhow::Result<()> {
     info!("load listener done");
 
     let connector = load_connector(
-        &config.remote_domain,
+        config.remote_domain,
         config.remote_port.unwrap_or(443),
         config.ca_cert.as_deref(),
-        &config.token_secret,
-        &config.token_header,
+        config.token_secret,
+        config.token_header,
     )
     .await?;
 
@@ -217,7 +219,7 @@ fn set_proxy_addr(
 
     if *addr.ip() == Ipv4Addr::new(0, 0, 0, 0) {
         // when set 0.0.0.0, we need bpf use 127.0.0.1 to connect local
-        addr.set_ip(Ipv4Addr::new(127, 0, 0, 1));
+        addr.set_ip(Ipv4Addr::LOCALHOST);
     }
 
     let proxy_addr = ShareIpv4Addr {
@@ -245,7 +247,7 @@ fn set_proxy_addr(
 
     if *addr_v6.ip() == Ipv6Addr::from([0, 0, 0, 0, 0, 0, 0, 0]) {
         // when set 0.0.0.0, we need bpf use ::1 to connect local
-        addr_v6.set_ip(Ipv6Addr::from([0, 0, 0, 0, 0, 0, 0, 1]));
+        addr_v6.set_ip(Ipv6Addr::LOCALHOST);
     }
 
     let proxy_addr = ShareIpv6Addr {
@@ -294,11 +296,11 @@ async fn load_listener(
 }
 
 async fn load_connector(
-    remote_domain: &str,
+    remote_domain: String,
     remote_port: u16,
     ca_cert: Option<&Path>,
-    token_secret: &str,
-    token_header: &str,
+    token_secret: String,
+    token_header: String,
 ) -> anyhow::Result<HyperConnector> {
     let mut root_cert_store = RootCertStore::empty();
     for cert in rustls_native_certs::load_native_certs()? {
@@ -317,14 +319,14 @@ async fn load_connector(
     let client_config = ClientConfig::builder()
         .with_root_certificates(root_cert_store)
         .with_no_client_auth();
-    let token_generator = TokenGenerator::new(token_secret.to_string(), None)?;
+    let auth = Auth::new(token_secret, None)?;
 
     HyperConnector::new(
         client_config,
         remote_domain,
         remote_port,
-        token_generator,
         token_header,
+        auth,
     )
 }
 

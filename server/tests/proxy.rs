@@ -1,25 +1,24 @@
 use std::convert::Infallible;
 use std::net::IpAddr;
 use std::path::Path;
-use std::sync::Arc;
 
 use bytes::{BufMut, Bytes, BytesMut};
 use futures_channel::mpsc;
+use futures_rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
+use futures_rustls::rustls::{ClientConfig, RootCertStore, ServerConfig};
 use futures_util::SinkExt;
 use http::{HeaderMap, HeaderValue, Request, Uri};
 use http_body_util::{BodyExt, StreamBody};
 use hyper::body::Frame;
-use hyper_rustls::HttpsConnectorBuilder;
+use hyper_rustls::{FixedServerNameResolver, HttpsConnectorBuilder};
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::{TokioExecutor, TokioTimer};
-use lycoris_server::{Auth, HyperServer};
+use lycoris_server::HyperServer;
+use protocol::auth::Auth;
 use share::log::init_log;
 use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
-use tokio_rustls::rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
-use tokio_rustls::rustls::{ClientConfig, RootCertStore, ServerConfig};
-use tokio_rustls::TlsAcceptor;
 use totp_rs::{Algorithm, TOTP};
 use tracing::debug;
 
@@ -40,11 +39,9 @@ async fn main() {
         .unwrap();
     let client_config = create_client_config().await;
 
-    let tls_acceptor = TlsAcceptor::from(Arc::new(server_config));
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-
-    let mut server = HyperServer::new(TOTP_HEADER, auth, listener, tls_acceptor);
+    let server = HyperServer::new(TOTP_HEADER.to_string(), auth, listener, server_config).unwrap();
 
     tokio::spawn(async move {
         if let Err(err) = server.start().await {
@@ -55,7 +52,9 @@ async fn main() {
     let https_connector = HttpsConnectorBuilder::new()
         .with_tls_config(client_config)
         .https_only()
-        .with_server_name("localhost".to_string())
+        .with_server_name_resolver(FixedServerNameResolver::new(
+            "localhost".try_into().unwrap(),
+        ))
         .enable_http2()
         .build();
     let client = Client::builder(TokioExecutor::new())

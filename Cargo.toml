@@ -1,3 +1,33 @@
 [workspace]
-members = ["server", "bpf", "client", "share"]
+members = ["server", "bpf", "client", "share", "protocol"]
 resolver = "2"
+
+[workspace.dependencies]
+anyhow = "1"
+bytes = "1"
+cidr = "0.2"
+clap = { version = "4", features = ["derive", "color", "suggestions"] }
+event-listener = "5"
+futures-channel = "0.3"
+futures-rustls = "0.26"
+futures-util = "0.3"
+hickory-resolver = { version = "0.24", default-features = false }
+http = "1"
+http-body-util = "0.1"
+hyper = "1"
+hyper-util = "0.1"
+pin-project = "1"
+rustls-native-certs = "0.7"
+rustls-pemfile = "2"
+serde = "1"
+serde_yaml = "0.9"
+tap = "1"
+tokio = "1"
+tokio-stream = "0.1"
+tokio-util = "0.7"
+totp-rs = "5"
+thiserror = "1"
+tower-service = "0.3"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+trait-make = "0.1"

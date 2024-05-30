@@ -1,205 +1,86 @@
-use std::convert::Infallible;
-use std::net::SocketAddr;
-use std::sync::Arc;
+use std::future::Future;
+use std::io;
 
-use bytes::Bytes;
-use futures_channel::mpsc;
-use http::{Request, Response, StatusCode, Version};
-use http_body_util::combinators::BoxBody;
-use http_body_util::{BodyExt, Empty, StreamBody};
-use hyper::body::Incoming;
-use hyper::service::service_fn;
-use hyper_util::rt::{TokioExecutor, TokioTimer};
-use hyper_util::server::conn::auto::Builder;
-use share::h2_config::{
-    INITIAL_CONNECTION_WINDOW_SIZE, INITIAL_WINDOW_SIZE, MAX_FRAME_SIZE, PING_INTERVAL,
-    PING_TIMEOUT,
-};
-use share::hyper_body::{BodyStream, SinkBodySender};
+use futures_rustls::rustls::ServerConfig;
+use futures_util::{Stream, StreamExt, TryStreamExt};
+use hyper_util::rt::TokioTimer;
+use protocol::accept::Executor;
+use protocol::auth::Auth;
+use protocol::HyperListener;
+use share::dns::HickoryDnsResolver;
 use share::proxy;
+use share::tcp_wrapper::{TcpListenerAddrStream, TokioTcp};
 use tap::TapFallible;
 use tokio::net::{TcpListener, TcpStream};
-use tokio_util::io::{SinkWriter, StreamReader};
-use tracing::{debug, error, info, instrument};
+use tracing::{error, info};
 
-use crate::auth::Auth;
-use crate::tls_accept::TlsAcceptor;
-use crate::{addr, Error};
+use crate::Error;
+
+type TokioTcpAcceptor = impl Stream<Item = io::Result<TokioTcp>> + Send + Unpin;
 
 pub struct HyperServer {
-    handler: Arc<HyperServerHandler>,
-    builder: Builder<TokioExecutor>,
-    tls_acceptor: TlsAcceptor,
+    protocol_listener: HyperListener<TokioTcpAcceptor, TokioExecutorWrapper, HickoryDnsResolver>,
 }
 
-#[derive(Debug)]
-struct HyperServerHandler {
-    token_header: String,
-    auth: Auth,
-}
+#[derive(Clone)]
+struct TokioExecutorWrapper;
 
-impl HyperServerHandler {
-    #[instrument]
-    async fn handle(
-        &self,
-        request: Request<Incoming>,
-    ) -> Result<Response<BoxBody<Bytes, Infallible>>, Error> {
-        if request.version() != Version::HTTP_2 {
-            error!("reject not http2 request");
-
-            let mut response = Response::new(Empty::new().boxed());
-            *response.status_mut() = StatusCode::UNAUTHORIZED;
-
-            return Ok(response);
-        }
-
-        if !self.auth_token(&request) {
-            let mut response = Response::new(Empty::new().boxed());
-            *response.status_mut() = StatusCode::UNAUTHORIZED;
-
-            return Ok(response);
-        }
-
-        info!("http2 token auth done");
-
-        let mut body = request.into_body();
-        let addrs = match Self::get_remote_addrs(&mut body).await {
-            Err(Error::AddrNotEnough) => {
-                let mut response = Response::new(Empty::new().boxed());
-                *response.status_mut() = StatusCode::BAD_REQUEST;
-
-                return Ok(response);
-            }
-
-            Err(err) => return Err(err),
-
-            Ok(addrs) => addrs,
-        };
-
-        info!(?addrs, "get remote addrs done");
-
-        let tcp_stream = TcpStream::connect(addrs.as_slice())
-            .await
-            .tap_err(|err| error!(?addrs, %err, "connect to target failed"))?;
-
-        info!(?addrs, "connect to remote done");
-
-        let (body_tx, body_rx) = mpsc::unbounded();
-        let response = Response::new(StreamBody::new(body_rx).boxed());
-
-        tokio::spawn(async move {
-            let (remote_in_tcp, remote_out_tcp) = tcp_stream.into_split();
-
-            proxy::proxy(
-                remote_in_tcp,
-                remote_out_tcp,
-                StreamReader::new(BodyStream::from(body)),
-                SinkWriter::new(SinkBodySender::from(body_tx)),
-            )
-            .await
-        });
-
-        Ok(response)
-    }
-
-    #[instrument(err(Debug))]
-    async fn get_remote_addrs(body: &mut Incoming) -> Result<Vec<SocketAddr>, Error> {
-        let frame = match body.frame().await {
-            None => return Err(Error::AddrNotEnough),
-            Some(Err(err)) => return Err(err.into()),
-            Some(Ok(frame)) => frame,
-        };
-
-        let data = match frame.into_data() {
-            Ok(data) => data,
-            Err(_) => return Err(Error::AddrNotEnough),
-        };
-
-        debug!("get remote addrs data done");
-
-        addr::parse_addr(&data).await
-    }
-
-    #[instrument(ret)]
-    fn auth_token(&self, request: &Request<Incoming>) -> bool {
-        let token = match request.headers().get(&self.token_header) {
-            None => {
-                error!("the h2 request doesn't have token header, reject it");
-
-                return false;
-            }
-
-            Some(token) => match token.to_str() {
-                Err(err) => {
-                    error!(%err,"token is not valid utf8 string");
-
-                    return false;
-                }
-
-                Ok(token) => token,
-            },
-        };
-
-        self.auth.auth(token)
+impl Executor for TokioExecutorWrapper {
+    fn execute<Fut>(&self, fut: Fut)
+    where
+        Fut: Future + Send + 'static,
+        Fut::Output: Send + 'static,
+    {
+        tokio::spawn(fut);
     }
 }
 
 impl HyperServer {
     pub fn new(
-        token_header: &str,
+        token_header: String,
         auth: Auth,
         tcp_listener: TcpListener,
-        tls_acceptor: tokio_rustls::TlsAcceptor,
-    ) -> Self {
-        let tls_acceptor = TlsAcceptor::new(tcp_listener, tls_acceptor);
-        let handler = Arc::new(HyperServerHandler {
-            token_header: token_header.to_string(),
+        server_tls_config: ServerConfig,
+    ) -> Result<Self, Error> {
+        let tcp_listener =
+            TcpListenerAddrStream::from(tcp_listener).map_ok(|(stream, _)| TokioTcp::from(stream));
+
+        let protocol_listener = HyperListener::new(
+            tcp_listener,
+            TokioExecutorWrapper,
+            server_tls_config,
+            token_header,
             auth,
-        });
+            HickoryDnsResolver::new()?,
+            TokioTimer::new(),
+        );
 
-        let mut builder = Builder::new(TokioExecutor::new());
-        builder
-            .http2()
-            .timer(TokioTimer::new())
-            .initial_stream_window_size(INITIAL_WINDOW_SIZE)
-            .initial_connection_window_size(INITIAL_CONNECTION_WINDOW_SIZE)
-            .max_frame_size(MAX_FRAME_SIZE)
-            .keep_alive_timeout(PING_TIMEOUT)
-            .keep_alive_interval(PING_INTERVAL);
-
-        Self {
-            handler,
-            builder,
-            tls_acceptor,
-        }
+        Ok(Self { protocol_listener })
     }
 
-    pub async fn start(&mut self) -> Result<(), Error> {
-        loop {
-            let stream = match self.tls_acceptor.accept().await {
-                Err(err) => {
-                    error!(%err, "accept tls failed");
+    pub async fn start(self) -> Result<(), Error> {
+        let (task, mut acceptor) = self.protocol_listener.listen();
 
-                    continue;
-                }
-
-                Ok(stream) => stream,
-            };
-
-            let handler = self.handler.clone();
-            let builder = self.builder.clone();
+        while let Some(res) = acceptor.next().await {
+            let addrs = res.0;
+            let writer = res.1;
+            let reader = res.2;
 
             tokio::spawn(async move {
-                let connection = builder.serve_connection(
-                    stream,
-                    service_fn(move |req| {
-                        let handler = handler.clone();
-                        async move { handler.handle(req).await }
-                    }),
-                );
+                let tcp_stream = TcpStream::connect(addrs.as_slice())
+                    .await
+                    .tap_err(|err| error!(?addrs, %err, "connect to target failed"))?;
 
-                connection.await
+                info!(?addrs, "connect to remote done");
+
+                let (remote_in_tcp, remote_out_tcp) = tcp_stream.into_split();
+
+                proxy::proxy(remote_in_tcp, remote_out_tcp, reader, writer).await
             });
         }
+
+        task.stop();
+
+        Err(Error::Other("acceptor stopped".into()))
     }
 }

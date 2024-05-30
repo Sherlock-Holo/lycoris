@@ -1,17 +1,22 @@
 [package]
 name = "share"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-futures-util = { version = "0.3", features = ["io", "sink"] }
-futures-channel = { version = "0.3", features = ["sink"] }
-bytes = "1"
-tokio = { version = "1", features = ["macros", "rt", "io-util", "net"] }
-http = "1"
-hyper = "1"
-tap = "1"
-tracing = "0.1"
-tracing-subscriber = "0.3"
+bytes = { workspace = true }
+futures-channel = { workspace = true, features = ["sink"] }
+futures-util = { workspace = true, features = ["io", "sink"] }
+hickory-resolver = { workspace = true, features = ["default", "system-config"] }
+http = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true, features = ["client-legacy", "http2", "tokio"] }
+tap = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt", "io-util", "net"] }
+tokio-util = { workspace = true, features = ["compat"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+protocol = { path = "../protocol" }

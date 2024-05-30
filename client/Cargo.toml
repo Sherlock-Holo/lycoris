@@ -1,6 +1,6 @@
 [package]
 name = "lycoris-client"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 license = "MIT"
 rust-version = "1.75"
@@ -8,51 +8,36 @@ rust-version = "1.75"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1"
-bytes = "1"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "fs", "sync", "time"] }
-tap = "1"
+anyhow = { workspace = true }
+bytes = { workspace = true }
+cidr = { workspace = true }
+clap = { workspace = true, features = ["derive", "color", "suggestions"] }
+hickory-resolver = { workspace = true, features = ["default", "system-config"] }
+http = { workspace = true }
+hyper = { workspace = true, features = ["http2", "client"] }
+hyper-util = { workspace = true, features = ["client-legacy", "http2", "tokio"] }
+http-body-util = { workspace = true }
+futures-channel = { workspace = true, features = ["sink"] }
+futures-rustls = { workspace = true }
+futures-util = { workspace = true, features = ["io"] }
+rustls-native-certs = { workspace = true }
+rustls-pemfile = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_yaml = { workspace = true }
+tap = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net", "io-util", "fs", "sync", "time"] }
+tokio-stream = { workspace = true, features = ["time", "io-util", "net"] }
+tokio-util = { workspace = true, features = ["compat", "io"] }
+tracing = { workspace = true }
+trait-make = { workspace = true }
 
-# async
-tokio-stream = { version = "0.1", features = ["time", "io-util", "net"] }
-tokio-util = { version = "0.7", features = ["io"] }
-futures-util = { version = "0.3", features = ["io"] }
-futures-channel = { version = "0.3", features = ["sink"] }
-trait-variant = "0.1"
-
-# log
-tracing = "0.1"
+protocol = { path = "../protocol" }
+share = { path = "../share" }
 
 # bpf
 aya = { git = "https://github.com/aya-rs/aya", rev = "80736c5", features = ["async_tokio"] }
 aya-log = { git = "https://github.com/aya-rs/aya", rev = "80736c5" }
 tracing-log = "0.2"
-
-# auth
-totp-rs = { version = "5", features = ["otpauth"] }
-
-# http/2
-http = "1"
-hyper = { version = "1", features = ["http2", "client"] }
-hyper-rustls = { version = "0.26", features = ["http2", "logging"] }
-hyper-util = { version = "0.1", features = ["client-legacy", "http2", "tokio"] }
-http-body-util = "0.1"
-
-# tls
-tokio-rustls = "0.25"
-rustls-pemfile = "2"
-rustls-native-certs = "0.7"
-
-# config and args
-serde = { version = "1", features = ["derive"] }
-serde_yaml = "0.9"
-clap = { version = "4", features = ["derive", "color", "suggestions"] }
-
-# ip addr
-cidr = "0.2"
-hickory-resolver = "0.24"
-
-share = { path = "../share" }
 
 [dev-dependencies]
 rustix = { version = "0.38", features = ["process"] }

@@ -2,11 +2,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context;
+use protocol::DomainOrSocketAddr;
 use share::proxy;
 use tokio::time;
 use tracing::{info, instrument};
 
-use crate::addr::domain_or_socket_addr::DomainOrSocketAddr;
 use crate::connect::Connect;
 use crate::listener::{Listener, Split};
 

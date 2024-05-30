@@ -5,14 +5,14 @@ use anyhow::Context;
 use aya::maps::{HashMap, Map, MapData};
 use futures_util::stream::SelectAll;
 use futures_util::{stream, StreamExt};
+use protocol::DomainOrSocketAddr;
 use share::helper::Ipv6AddrExt;
-use share::tcp_listener_stream::TcpListenerAddrStream;
+use share::tcp_wrapper::TcpListenerAddrStream;
 use tap::TapFallible;
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{error, info, instrument, warn};
 
 use super::Listener;
-use crate::addr::domain_or_socket_addr::DomainOrSocketAddr;
 use crate::addr::DstAddrLookup;
 use crate::bpf_share::{
     ConnectedIpv4Addr, ConnectedIpv6Addr, Ipv4Addr as ShareIpv4Addr, Ipv6Addr as ShareIpv6Addr,
