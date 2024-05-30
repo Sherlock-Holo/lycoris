@@ -58,6 +58,8 @@ impl Connect for HyperConnector {
     type Write = impl tokio::io::AsyncWrite + Unpin + Send + 'static;
 
     async fn connect(&self, addr: DomainOrSocketAddr) -> anyhow::Result<(Self::Read, Self::Write)> {
-        self.protocol_connector.connect(addr).await
+        let rw = self.protocol_connector.connect(addr).await?;
+
+        Ok(rw)
     }
 }
