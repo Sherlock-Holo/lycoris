@@ -1082,7 +1082,7 @@ dependencies = [
 
 [[package]]
 name = "lycoris-client"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "aya",
@@ -1117,7 +1117,7 @@ dependencies = [
 
 [[package]]
 name = "lycoris-server"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "bytes",
  "clap",
@@ -1721,7 +1721,7 @@ dependencies = [
 
 [[package]]
 name = "share"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bytes",
  "futures-channel",
