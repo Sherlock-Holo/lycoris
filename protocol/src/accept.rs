@@ -9,7 +9,7 @@ use std::{io, mem, slice};
 
 use bytes::{Buf, Bytes};
 use futures_channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use futures_rustls::rustls::ServerConfig;
+pub use futures_rustls::rustls::ServerConfig;
 use futures_rustls::server::TlsStream;
 use futures_util::{AsyncRead, AsyncWrite, Stream, TryFutureExt, TryStreamExt};
 use http::{Request, Response, StatusCode, Version};
@@ -388,9 +388,6 @@ pub enum Error {
 
     #[error("address domain invalid")]
     AddrDomainInvalid,
-
-    #[error("auth failed")]
-    AuthFailed,
 
     #[error(transparent)]
     Other(Box<dyn std::error::Error + Send + Sync + 'static>),

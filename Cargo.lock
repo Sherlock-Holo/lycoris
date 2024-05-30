@@ -1397,7 +1397,6 @@ dependencies = [
 name = "protocol"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "bytes",
  "event-listener",
  "futures-channel",

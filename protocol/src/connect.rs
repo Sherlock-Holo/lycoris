@@ -7,7 +7,6 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{ready, Context, Poll};
 
-use anyhow::Context as _;
 use bytes::Bytes;
 use futures_channel::mpsc;
 use futures_rustls::client::TlsStream;
@@ -41,6 +40,18 @@ pub type ReadWrite = (
     SinkWriter<SinkBodySender<Infallible>>,
 );
 
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error(transparent)]
+    Http(#[from] http::Error),
+
+    #[error("hyper error: {0}")]
+    Hyper(#[from] hyper_util::client::legacy::Error),
+
+    #[error(transparent)]
+    Other(Box<dyn std::error::Error + Send + Sync + 'static>),
+}
+
 #[derive(Debug)]
 pub struct HyperConnectorConfig<TC, DR, E, T> {
     pub tls_client_config: ClientConfig,
@@ -68,7 +79,7 @@ struct HyperConnectorInner<TC, DR> {
 }
 
 impl<DR: DnsResolver + Sync + 'static, TC: TcpConnector + Sync + 'static> HyperConnector<TC, DR> {
-    pub fn new<E, T>(config: HyperConnectorConfig<TC, DR, E, T>) -> anyhow::Result<Self>
+    pub fn new<E, T>(config: HyperConnectorConfig<TC, DR, E, T>) -> Result<Self, Error>
     where
         E: hyper::rt::Executor<Pin<Box<dyn Future<Output = ()> + Send>>>
             + Send
@@ -99,7 +110,8 @@ impl<DR: DnsResolver + Sync + 'static, TC: TcpConnector + Sync + 'static> HyperC
                 remote_addr: Uri::try_from(format!(
                     "https://{}:{}",
                     config.remote_domain, config.remote_port
-                ))?,
+                ))
+                .map_err(|err| Error::Other(err.into()))?,
                 token_generator: config.auth,
                 token_header: config.token_header,
             }),
@@ -107,7 +119,7 @@ impl<DR: DnsResolver + Sync + 'static, TC: TcpConnector + Sync + 'static> HyperC
     }
 
     #[instrument(skip(self), err(Debug))]
-    pub async fn connect(&self, remote_addr: DomainOrSocketAddr) -> anyhow::Result<ReadWrite> {
+    pub async fn connect(&self, remote_addr: DomainOrSocketAddr) -> Result<ReadWrite, Error> {
         let token = self.inner.token_generator.generate_token();
         let remote_addr_data = super::encode_addr(remote_addr);
 
@@ -120,15 +132,9 @@ impl<DR: DnsResolver + Sync + 'static, TC: TcpConnector + Sync + 'static> HyperC
             .version(Version::HTTP_2)
             .uri(self.inner.remote_addr.clone())
             .header(&self.inner.token_header, token)
-            .body(BoxBody::new(StreamBody::new(req_body_rx)))
-            .with_context(|| "build h2 request failed")?;
+            .body(BoxBody::new(StreamBody::new(req_body_rx)))?;
 
-        let response = self
-            .inner
-            .client
-            .request(request)
-            .await
-            .with_context(|| "send h2 request failed")?;
+        let response = self.inner.client.request(request).await?;
 
         info!("receive h2 response done");
 
@@ -136,7 +142,9 @@ impl<DR: DnsResolver + Sync + 'static, TC: TcpConnector + Sync + 'static> HyperC
             let status_code = response.status();
             error!(%status_code, "status code is not 200");
 
-            return Err(anyhow::anyhow!("status {status_code} is not 200"));
+            return Err(Error::Other(
+                format!("status {status_code} is not 200").into(),
+            ));
         }
 
         info!("get h2 stream done");

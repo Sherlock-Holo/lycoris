@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = { workspace = true }
 bytes = { workspace = true }
 event-listener = { workspace = true }
 futures-util = { workspace = true, features = ["io", "sink"] }

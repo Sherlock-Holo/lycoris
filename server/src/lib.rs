@@ -41,7 +41,7 @@ pub async fn run() -> Result<(), Error> {
 
     info!(listen_addr = %config.listen_addr, "start listen");
 
-    let auth = Auth::new(config.token_secret, None).expect("TODO");
+    let auth = Auth::new(config.token_secret, None).map_err(|err| Error::Other(err.into()))?;
     let server = HyperServer::new(config.token_header, auth, tcp_listener, server_config)?;
 
     server.start().await

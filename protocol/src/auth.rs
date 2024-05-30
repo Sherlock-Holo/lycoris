@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Formatter};
 
-use totp_rs::{Algorithm, TOTP};
+use totp_rs::{Algorithm, TotpUrlError, TOTP};
 
 pub struct Auth {
     totp: TOTP,
@@ -18,7 +18,7 @@ impl Auth {
     pub fn new(
         token_secret: String,
         account_name: impl Into<Option<String>>,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self, TotpUrlError> {
         Ok(Self {
             totp: TOTP::new(
                 Algorithm::SHA512,
