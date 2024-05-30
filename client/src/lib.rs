@@ -34,7 +34,6 @@ use crate::config::Config;
 use crate::connect::hyper::HyperConnector;
 pub use crate::listener::bpf::BpfListener;
 pub use crate::owned_link::OwnedLink;
-pub use crate::token::TokenGenerator;
 
 mod addr;
 mod args;
@@ -45,7 +44,6 @@ mod config;
 mod connect;
 mod listener;
 mod owned_link;
-mod token;
 
 pub async fn run() -> anyhow::Result<()> {
     let args = Args::parse();

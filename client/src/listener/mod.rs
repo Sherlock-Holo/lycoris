@@ -6,7 +6,7 @@ use tokio::net::TcpStream;
 
 pub mod bpf;
 
-#[trait_variant::make(Send)]
+#[trait_make::make(Send)]
 pub trait Listener {
     type Stream: Split;
 

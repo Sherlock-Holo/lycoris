@@ -3,7 +3,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 
 pub mod hyper;
 
-#[trait_variant::make(Send)]
+#[trait_make::make(Send)]
 pub trait Connect {
     type Read: AsyncRead + Unpin + Send + 'static;
     type Write: AsyncWrite + Unpin + Send + 'static;

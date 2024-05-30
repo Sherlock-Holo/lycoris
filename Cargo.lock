@@ -376,9 +376,9 @@ checksum = "8d18b093eba54c9aaa1e3784d4361eb2ba944cf7d0a932a830132238f483e8d8"
 
 [[package]]
 name = "clang-sys"
-version = "1.8.0"
+version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a483f3cbf7cec2e153d424d0e92329d816becc6421389bd494375c6065921b9b"
+checksum = "f803f94ecf597339c7a34eed2036ef83f86aaba937f001f7c5b5e251f043f1f9"
 dependencies = [
  "glob",
  "libc",
@@ -1098,7 +1098,6 @@ dependencies = [
  "http",
  "http-body-util",
  "hyper",
- "hyper-rustls",
  "hyper-util",
  "protocol",
  "rustix",
@@ -1111,10 +1110,9 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tokio-util",
- "totp-rs",
  "tracing",
  "tracing-log",
- "trait-variant",
+ "trait-make",
 ]
 
 [[package]]
@@ -1139,7 +1137,6 @@ dependencies = [
  "tap",
  "thiserror",
  "tokio",
- "tokio-rustls",
  "tokio-util",
  "tracing",
 ]
@@ -2044,17 +2041,6 @@ name = "trait-make"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96cbd06a7b648f1603e60d75d9ed295d096b340d30e9f9324f4b512b5d40cd92"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.66",
-]
-
-[[package]]
-name = "trait-variant"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70977707304198400eb4835a78f6a9f928bf41bba420deb8fdb175cd965d77a7"
 dependencies = [
  "proc-macro2",
  "quote",
