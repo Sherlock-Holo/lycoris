@@ -12,7 +12,7 @@ use hyper::body::Frame;
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::{TokioExecutor, TokioTimer};
-use lycoris_server::{Auth, HyperServer};
+use lycoris_server::{Auth, OldHyperServer};
 use share::log::init_log;
 use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -44,7 +44,7 @@ async fn main() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 
-    let mut server = HyperServer::new(TOTP_HEADER, auth, listener, tls_acceptor);
+    let mut server = OldHyperServer::new(TOTP_HEADER, auth, listener, tls_acceptor);
 
     tokio::spawn(async move {
         if let Err(err) = server.start().await {

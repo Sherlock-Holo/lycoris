@@ -7,7 +7,7 @@ use futures_util::stream::SelectAll;
 use futures_util::{stream, StreamExt};
 use protocol::DomainOrSocketAddr;
 use share::helper::Ipv6AddrExt;
-use share::tcp_listener_stream::TcpListenerAddrStream;
+use share::tcp_wrapper::TcpListenerAddrStream;
 use tap::TapFallible;
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{error, info, instrument, warn};

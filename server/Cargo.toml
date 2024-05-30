@@ -7,10 +7,15 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+futures-rustls = { workspace = true }
+tokio-util = { workspace = true, features = ["compat"] }
+
+protocol = { path = "../protocol" }
+
 thiserror = "1"
 bytes = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "fs"] }
-tokio-util = { version = "0.7", features = ["io"] }
+
 futures-util = { version = "0.3", features = ["io"] }
 futures-channel = "0.3"
 tap = "1"
@@ -18,8 +23,7 @@ tap = "1"
 # log
 tracing = "0.1"
 
-# auth
-totp-rs = { version = "5", features = ["otpauth"] }
+
 
 # http/2
 http = "1"

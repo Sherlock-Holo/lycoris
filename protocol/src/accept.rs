@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use std::future::Future;
 use std::io::ErrorKind;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::pin::Pin;
@@ -15,11 +16,11 @@ use http::{Request, Response, StatusCode, Version};
 use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt, Empty, StreamBody};
 use hyper::body::Incoming;
-use hyper::rt::{Executor, Read, ReadBufCursor, Timer, Write};
+use hyper::rt::{Executor as HyperExecutor, Read, ReadBufCursor, Timer, Write};
 use hyper::service::service_fn;
 use hyper_util::server::conn::auto::Builder;
 use thiserror::Error;
-use tokio_util::io::StreamReader;
+use tokio_util::io::{SinkWriter, StreamReader};
 use tracing::{debug, error, info, instrument};
 
 use crate::abort::{AbortHandle, Aborted, FutureAbortExt};
@@ -44,7 +45,7 @@ impl ListenTask {
 pub struct HyperListener<A, E, D> {
     tls_acceptor: TlsAcceptor<A>,
     executor: E,
-    builder: Builder<E>,
+    builder: Builder<ExecutorWrapper<E>>,
     token_header: String,
     auth: Auth,
     dns_resolver: D,
@@ -60,7 +61,7 @@ impl<A, E: Clone, D> HyperListener<A, E, D> {
         dns_resolver: D,
         timer: T,
     ) -> Self {
-        let mut builder = Builder::new(executor.clone());
+        let mut builder = Builder::new(ExecutorWrapper(executor.clone()));
         builder
             .http2()
             .timer(timer)
@@ -81,13 +82,32 @@ impl<A, E: Clone, D> HyperListener<A, E, D> {
     }
 }
 
+pub trait Executor {
+    fn execute<Fut>(&self, fut: Fut)
+    where
+        Fut: Future + Send + 'static,
+        Fut::Output: Send + 'static;
+}
+
+#[derive(Clone)]
+struct ExecutorWrapper<E>(E);
+
+impl<Fut, E: Executor> HyperExecutor<Fut> for ExecutorWrapper<E>
+where
+    Fut: Future + Send + 'static,
+    Fut::Output: Send + 'static,
+{
+    fn execute(&self, fut: Fut) {
+        self.0.execute(fut)
+    }
+}
+
 impl<IO, A, E, D> HyperListener<A, E, D>
 where
-    IO: AsyncRead + AsyncWrite + Unpin + 'static,
-    A: Stream<Item = io::Result<IO>> + Unpin,
-    E: Clone,
+    IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    A: Stream<Item = io::Result<IO>> + Unpin + Send + 'static,
+    E: Executor + Clone + Send + Sync + 'static,
     D: DnsResolver + Clone + 'static,
-    for<Fut> E: Executor<Fut>,
 {
     pub fn listen(self) -> (ListenTask, HyperAcceptor) {
         let Self {
@@ -108,7 +128,7 @@ where
                 loop {
                     let stream = match tls_acceptor.accept().await {
                         Err(err) => {
-                            error ! ( % err, "accept tls failed");
+                            error!( % err, "accept tls failed");
 
                             continue;
                         }
@@ -161,7 +181,7 @@ where
 
 pub type AcceptorResult = (
     Vec<SocketAddr>,
-    SinkBodySender<Infallible>,
+    SinkWriter<SinkBodySender<Infallible>>,
     StreamReader<BodyStream, Bytes>,
 );
 
@@ -232,7 +252,7 @@ impl HyperServerHandler {
         let sink_body_sender = SinkBodySender::from(body_tx);
 
         result_tx
-            .unbounded_send((addrs, sink_body_sender, stream_reader))
+            .unbounded_send((addrs, SinkWriter::new(sink_body_sender), stream_reader))
             .map_err(|err| Error::Other(err.into()))?;
 
         Ok(response)

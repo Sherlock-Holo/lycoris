@@ -1,5 +1,3 @@
-#![feature(non_lifetime_binders)]
-
 use std::io;
 use std::net::{IpAddr, SocketAddr};
 
