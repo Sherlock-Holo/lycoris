@@ -188,7 +188,7 @@ impl BpfListener {
         {
             None => {
                 error!(
-                    ?connected_ipv6addr,
+                    %connected_ipv6addr,
                     "origin dst v6 addr not found, has to close tcp"
                 );
 
@@ -197,7 +197,7 @@ impl BpfListener {
 
             Some(origin_dst_addr) => {
                 info!(
-                    ?connected_ipv6addr,
+                    %connected_ipv6addr,
                     %origin_dst_addr,
                     "get origin dst addr by connected ipv6 addr done"
                 );

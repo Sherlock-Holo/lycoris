@@ -1,12 +1,10 @@
 use core::ffi::c_long;
 use core::mem;
-use core::num::NonZeroUsize;
 
 use aya_bpf::bindings::BPF_SOCK_OPS_ACTIVE_ESTABLISHED_CB;
 use aya_bpf::helpers::*;
 use aya_bpf::programs::SockOpsContext;
-use aya_log_ebpf::macro_support::IpFormatter;
-use aya_log_ebpf::{debug, WriteToBuf};
+use aya_log_ebpf::debug;
 
 use crate::kernel_binding::require::{AF_INET, AF_INET6};
 use crate::map::*;
@@ -106,9 +104,23 @@ fn handle_ipv6(ctx: SockOpsContext) -> Result<(), c_long> {
         origin_dst_ipv6_addr.port
     );
 
-    let saddr = U32Array4(ctx.local_ip6());
+    let saddr = unsafe {
+        mem::transmute::<[u32; 4], [u8; 16]>([
+            ctx.local_ip6()[0],
+            ctx.local_ip6()[1],
+            ctx.local_ip6()[2],
+            ctx.local_ip6()[3],
+        ])
+    };
     let sport = ctx.local_port() as u16;
-    let daddr = U32Array4(ctx.remote_ip6());
+    let daddr = unsafe {
+        mem::transmute::<[u32; 4], [u8; 16]>([
+            ctx.remote_ip6()[0],
+            ctx.remote_ip6()[1],
+            ctx.remote_ip6()[2],
+            ctx.remote_ip6()[3],
+        ])
+    };
     let dport = u32::from_be(ctx.remote_port());
     let dport = dport as u16;
 
@@ -120,31 +132,11 @@ fn handle_ipv6(ctx: SockOpsContext) -> Result<(), c_long> {
     let connected_ipv6_addr = ConnectedIpv6Addr {
         sport,
         dport,
-        saddr: unsafe { mem::transmute(saddr) },
-        daddr: unsafe { mem::transmute(daddr) },
+        saddr,
+        daddr,
     };
 
     IPV6_ADDR_MAP.insert(&connected_ipv6_addr, &origin_dst_ipv6_addr, 0)?;
 
     Ok(())
 }
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-#[repr(transparent)]
-struct U32Array4([u32; 4]);
-
-impl From<[u32; 4]> for U32Array4 {
-    #[inline]
-    fn from(value: [u32; 4]) -> Self {
-        Self(value)
-    }
-}
-
-impl WriteToBuf for U32Array4 {
-    fn write(self, buf: &mut [u8]) -> Option<NonZeroUsize> {
-        let v = unsafe { *(self.0.as_ptr() as *const u128) };
-        v.to_be_bytes().write(buf)
-    }
-}
-
-impl IpFormatter for U32Array4 {}

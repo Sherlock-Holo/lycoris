@@ -157,8 +157,9 @@ dependencies = [
 
 [[package]]
 name = "aya"
-version = "0.11.0"
-source = "git+https://github.com/aya-rs/aya?rev=80736c5#80736c5db26cd64aa821bb21fcdcfbbe9471c7cd"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90eea657cc8028447cbda5068f4e10c4fadba0131624f4f7dd1a9c46ffc8d81f"
 dependencies = [
  "assert_matches",
  "aya-obj",
@@ -209,11 +210,12 @@ dependencies = [
 
 [[package]]
 name = "aya-log"
-version = "0.1.13"
-source = "git+https://github.com/aya-rs/aya?rev=80736c5#80736c5db26cd64aa821bb21fcdcfbbe9471c7cd"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1f11a92f305b983e9f53433457dede617a4ad0aa22e4702220092f39e844c1a2"
 dependencies = [
  "aya",
- "aya-log-common",
+ "aya-log-common 0.1.14",
  "bytes",
  "log",
  "thiserror",
@@ -229,12 +231,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "aya-log-common"
+version = "0.1.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6d38a351ee2d5dc24e04cac6184b1b39408642d9a8b585892c99146f8dd4edb"
+dependencies = [
+ "num_enum",
+]
+
+[[package]]
 name = "aya-log-ebpf"
 version = "0.1.0"
 source = "git+https://github.com/aya-rs/aya?rev=80736c5#80736c5db26cd64aa821bb21fcdcfbbe9471c7cd"
 dependencies = [
  "aya-bpf",
- "aya-log-common",
+ "aya-log-common 0.1.13",
  "aya-log-ebpf-macros",
 ]
 
@@ -243,7 +254,7 @@ name = "aya-log-ebpf-macros"
 version = "0.1.0"
 source = "git+https://github.com/aya-rs/aya?rev=80736c5#80736c5db26cd64aa821bb21fcdcfbbe9471c7cd"
 dependencies = [
- "aya-log-common",
+ "aya-log-common 0.1.13",
  "aya-log-parser",
  "proc-macro2",
  "quote",
@@ -255,13 +266,14 @@ name = "aya-log-parser"
 version = "0.1.11-dev.0"
 source = "git+https://github.com/aya-rs/aya?rev=80736c5#80736c5db26cd64aa821bb21fcdcfbbe9471c7cd"
 dependencies = [
- "aya-log-common",
+ "aya-log-common 0.1.13",
 ]
 
 [[package]]
 name = "aya-obj"
 version = "0.1.0"
-source = "git+https://github.com/aya-rs/aya?rev=80736c5#80736c5db26cd64aa821bb21fcdcfbbe9471c7cd"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c02024a307161cf3d1f052161958fd13b1a33e3e038083e58082c0700fdab85"
 dependencies = [
  "bytes",
  "core-error",

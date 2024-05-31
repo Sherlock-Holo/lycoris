@@ -35,8 +35,8 @@ protocol = { path = "../protocol" }
 share = { path = "../share" }
 
 # bpf
-aya = { git = "https://github.com/aya-rs/aya", rev = "80736c5", features = ["async_tokio"] }
-aya-log = { git = "https://github.com/aya-rs/aya", rev = "80736c5" }
+aya = { version = "0.12", features = ["async_tokio"] }
+aya-log = "0.2"
 tracing-log = "0.2"
 
 [dev-dependencies]
