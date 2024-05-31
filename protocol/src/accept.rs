@@ -4,19 +4,18 @@ use std::io::ErrorKind;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{ready, Context, Poll};
-use std::{io, mem, slice};
+use std::task::{Context, Poll};
+use std::{io, mem};
 
 use bytes::{Buf, Bytes};
 use futures_channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 pub use futures_rustls::rustls::ServerConfig;
-use futures_rustls::server::TlsStream;
 use futures_util::{AsyncRead, AsyncWrite, Stream, TryFutureExt, TryStreamExt};
 use http::{Request, Response, StatusCode, Version};
 use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt, Empty, StreamBody};
 use hyper::body::Incoming;
-use hyper::rt::{Executor as HyperExecutor, Read, ReadBufCursor, Timer, Write};
+use hyper::rt::{Executor as HyperExecutor, Timer};
 use hyper::service::service_fn;
 use hyper_util::server::conn::auto::Builder;
 use thiserror::Error;
@@ -30,7 +29,7 @@ use crate::h2_config::{
     PING_TIMEOUT,
 };
 use crate::hyper_body::{BodyStream, SinkBodySender};
-use crate::DnsResolver;
+use crate::{DnsResolver, GenericTlsStream, Reader, Writer};
 
 pub struct ListenTask {
     abort: AbortHandle,
@@ -179,11 +178,7 @@ where
     }
 }
 
-pub type AcceptorResult = (
-    Vec<SocketAddr>,
-    SinkWriter<SinkBodySender<Infallible>>,
-    StreamReader<BodyStream, Bytes>,
-);
+pub type AcceptorResult = (Vec<SocketAddr>, Writer, Reader);
 
 #[derive(Debug)]
 pub struct HyperAcceptor {
@@ -319,56 +314,18 @@ impl<A> TlsAcceptor<A> {
 }
 
 impl<IO: AsyncRead + AsyncWrite + Unpin, A: Stream<Item = io::Result<IO>> + Unpin> TlsAcceptor<A> {
-    async fn accept(&mut self) -> io::Result<HyperTlsStream<IO>> {
+    async fn accept(&mut self) -> io::Result<GenericTlsStream<IO>> {
         let stream = self
             .tcp_acceptor
             .try_next()
             .await?
             .ok_or_else(|| io::Error::new(ErrorKind::BrokenPipe, "TCP acceptor closed"))?;
-        self.tls_acceptor.accept(stream).await.map(HyperTlsStream)
-    }
-}
-
-pub struct HyperTlsStream<IO>(TlsStream<IO>);
-
-impl<IO: AsyncRead + AsyncWrite + Unpin> Read for HyperTlsStream<IO> {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        mut buf: ReadBufCursor<'_>,
-    ) -> Poll<io::Result<()>> {
-        // Safety: we won't read it, unless IO implement is stupid:(
-        let buf_mut = unsafe {
-            let buf_mut = buf.as_mut();
-            slice::from_raw_parts_mut(buf_mut.as_mut_ptr().cast(), buf_mut.len())
-        };
-
-        let n = ready!(Pin::new(&mut self.0).poll_read(cx, buf_mut))?;
-
-        // Safety: n is written
-        unsafe {
-            buf.advance(n);
-        }
-
-        Poll::Ready(Ok(()))
-    }
-}
-
-impl<IO: AsyncRead + AsyncWrite + Unpin> Write for HyperTlsStream<IO> {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.0).poll_write(cx, buf)
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.0).poll_flush(cx)
-    }
-
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.0).poll_close(cx)
+        self.tls_acceptor
+            .accept(stream)
+            .await
+            .map(|tls_stream| GenericTlsStream {
+                tls_stream: tls_stream.into(),
+            })
     }
 }
 

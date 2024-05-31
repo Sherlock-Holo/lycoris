@@ -1,9 +1,19 @@
-use std::io;
+use std::convert::Infallible;
 use std::net::{IpAddr, SocketAddr};
+use std::pin::Pin;
+use std::task::{ready, Context, Poll};
+use std::{io, slice};
 
 pub use accept::{HyperAcceptor, HyperListener};
 use bytes::{BufMut, Bytes, BytesMut};
 pub use connect::{HyperConnector, HyperConnectorConfig};
+use futures_rustls::TlsStream;
+use futures_util::{AsyncRead, AsyncWrite};
+use hyper::rt::ReadBufCursor;
+use hyper_util::client::legacy::connect::{Connected, Connection};
+use tokio_util::io::{SinkWriter, StreamReader};
+
+use crate::hyper_body::{BodyStream, SinkBodySender};
 
 mod abort;
 pub mod accept;
@@ -11,6 +21,9 @@ pub mod auth;
 pub mod connect;
 mod h2_config;
 mod hyper_body;
+
+pub type Reader = StreamReader<BodyStream, Bytes>;
+pub type Writer = SinkWriter<SinkBodySender<Infallible>>;
 
 #[trait_make::make(Send)]
 pub trait DnsResolver: Clone {
@@ -64,6 +77,57 @@ fn encode_addr(addr: impl Into<DomainOrSocketAddr>) -> Bytes {
                 buf.freeze()
             }
         },
+    }
+}
+
+pub struct GenericTlsStream<IO> {
+    tls_stream: TlsStream<IO>,
+}
+
+impl<IO: Connection> Connection for GenericTlsStream<IO> {
+    fn connected(&self) -> Connected {
+        self.tls_stream.get_ref().0.connected()
+    }
+}
+
+impl<IO: AsyncRead + AsyncWrite + Unpin> hyper::rt::Read for GenericTlsStream<IO> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        mut buf: ReadBufCursor<'_>,
+    ) -> Poll<io::Result<()>> {
+        // Safety: we won't read it, unless IO implement is stupid:(
+        let buf_mut = unsafe {
+            let buf_mut = buf.as_mut();
+            slice::from_raw_parts_mut(buf_mut.as_mut_ptr().cast(), buf_mut.len())
+        };
+
+        let n = ready!(Pin::new(&mut self.tls_stream).poll_read(cx, buf_mut))?;
+
+        // Safety: n is written
+        unsafe {
+            buf.advance(n);
+        }
+
+        Poll::Ready(Ok(()))
+    }
+}
+
+impl<IO: AsyncRead + AsyncWrite + Unpin> hyper::rt::Write for GenericTlsStream<IO> {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.tls_stream).poll_write(cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.tls_stream).poll_flush(cx)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.tls_stream).poll_close(cx)
     }
 }
 
