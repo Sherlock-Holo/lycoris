@@ -5,7 +5,6 @@ edition = "2021"
 
 [dependencies]
 bytes = { workspace = true }
-event-listener = { workspace = true }
 futures-util = { workspace = true, features = ["io", "sink"] }
 futures-channel = { workspace = true, features = ["sink"] }
 futures-rustls = { workspace = true, features = ["early-data"] }

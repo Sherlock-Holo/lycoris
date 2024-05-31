@@ -7,7 +7,6 @@ anyhow = "1"
 bytes = "1"
 cidr = "0.2"
 clap = { version = "4", features = ["derive", "color", "suggestions"] }
-event-listener = "5"
 futures-channel = "0.3"
 futures-rustls = "0.26"
 futures-util = "0.3"

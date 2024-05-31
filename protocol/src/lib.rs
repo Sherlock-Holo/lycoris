@@ -15,7 +15,6 @@ use tokio_util::io::{SinkWriter, StreamReader};
 
 use crate::hyper_body::{BodyStream, SinkBodySender};
 
-mod abort;
 pub mod accept;
 pub mod auth;
 pub mod connect;

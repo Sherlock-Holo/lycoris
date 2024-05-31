@@ -10,7 +10,8 @@ use std::{io, mem};
 use bytes::{Buf, Bytes};
 use futures_channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 pub use futures_rustls::rustls::ServerConfig;
-use futures_util::{AsyncRead, AsyncWrite, Stream, TryFutureExt, TryStreamExt};
+use futures_util::future::BoxFuture;
+use futures_util::{AsyncRead, AsyncWrite, Stream, TryStreamExt};
 use http::{Request, Response, StatusCode, Version};
 use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt, Empty, StreamBody};
@@ -22,7 +23,6 @@ use thiserror::Error;
 use tokio_util::io::{SinkWriter, StreamReader};
 use tracing::{debug, error, info, instrument};
 
-use crate::abort::{AbortHandle, Aborted, FutureAbortExt};
 use crate::auth::Auth;
 use crate::h2_config::{
     INITIAL_CONNECTION_WINDOW_SIZE, INITIAL_WINDOW_SIZE, MAX_FRAME_SIZE, PING_INTERVAL,
@@ -31,13 +31,16 @@ use crate::h2_config::{
 use crate::hyper_body::{BodyStream, SinkBodySender};
 use crate::{DnsResolver, GenericTlsStream, Reader, Writer};
 
+#[must_use]
 pub struct ListenTask {
-    abort: AbortHandle,
+    fut: BoxFuture<'static, ()>,
 }
 
-impl ListenTask {
-    pub fn stop(&self) {
-        self.abort.abort();
+impl Future for ListenTask {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        Pin::new(&mut self.fut).poll(cx)
     }
 }
 
@@ -117,60 +120,49 @@ where
             auth,
             dns_resolver,
         } = self;
-        let abort = AbortHandle::default();
+
         let (acceptor_tx, acceptor_rx) = mpsc::unbounded();
         let builder = Arc::new(builder);
         let handler = Arc::new(HyperServerHandler { token_header, auth });
-        let abort_clone = abort.clone();
-        executor.clone().execute(Box::pin(
-            async move {
-                loop {
-                    let stream = match tls_acceptor.accept().await {
-                        Err(err) => {
-                            error!( % err, "accept tls failed");
 
-                            continue;
-                        }
+        let fut = Box::pin(async move {
+            loop {
+                let stream = match tls_acceptor.accept().await {
+                    Err(err) => {
+                        error!( % err, "accept tls failed");
 
-                        Ok(stream) => stream,
-                    };
+                        continue;
+                    }
 
-                    let handler = handler.clone();
-                    let builder = builder.clone();
-                    let acceptor_tx = acceptor_tx.clone();
-                    let dns_resolver = dns_resolver.clone();
+                    Ok(stream) => stream,
+                };
 
-                    executor.execute(Box::pin(
-                        async move {
-                            let connection =
-                                builder.serve_connection(
-                                    stream,
-                                    service_fn(move |req| {
-                                        let handler = handler.clone();
-                                        let acceptor_tx = acceptor_tx.clone();
-                                        let dns_resolver = dns_resolver.clone();
+                let handler = handler.clone();
+                let builder = builder.clone();
+                let acceptor_tx = acceptor_tx.clone();
+                let dns_resolver = dns_resolver.clone();
 
-                                        async move {
-                                            handler.handle(req, acceptor_tx, dns_resolver).await
-                                        }
-                                    }),
-                                );
+                executor.execute(Box::pin(async move {
+                    let connection = builder.serve_connection(
+                        stream,
+                        service_fn(move |req| {
+                            let handler = handler.clone();
+                            let acceptor_tx = acceptor_tx.clone();
+                            let dns_resolver = dns_resolver.clone();
 
-                            connection.await.map_err(Error::Other)?;
+                            async move { handler.handle(req, acceptor_tx, dns_resolver).await }
+                        }),
+                    );
 
-                            Ok::<_, Error>(())
-                        }
-                        .abortable(&abort_clone)
-                        .map_err(Error::Aborted),
-                    ));
-                }
+                    connection.await.map_err(Error::Other)?;
+
+                    Ok::<_, Error>(())
+                }));
             }
-            .abortable(&abort)
-            .map_err(Error::Aborted),
-        ));
+        });
 
         (
-            ListenTask { abort },
+            ListenTask { fut },
             HyperAcceptor {
                 receiver: acceptor_rx,
             },
@@ -348,9 +340,6 @@ pub enum Error {
 
     #[error(transparent)]
     Other(Box<dyn std::error::Error + Send + Sync + 'static>),
-
-    #[error(transparent)]
-    Aborted(#[from] Aborted),
 }
 
 /// Parse addr from data

@@ -60,6 +60,7 @@ impl HyperServer {
 
     pub async fn start(self) -> Result<(), Error> {
         let (task, mut acceptor) = self.protocol_listener.listen();
+        tokio::spawn(task);
 
         while let Some(res) = acceptor.next().await {
             let addrs = res.0;
@@ -78,8 +79,6 @@ impl HyperServer {
                 proxy::proxy(remote_in_tcp, remote_out_tcp, reader, writer).await
             });
         }
-
-        task.stop();
 
         Err(Error::Other("acceptor stopped".into()))
     }
