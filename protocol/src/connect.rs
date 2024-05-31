@@ -84,7 +84,7 @@ impl<DR: DnsResolver + Sync + 'static, TC: TcpConnector + Sync + 'static> HyperC
         let https_connector = GenericHttpsConnector {
             dns_resolver: config.dns_resolver,
             tcp_connector: config.tcp_connector,
-            tls_connector: TlsConnector::from(Arc::new(config.tls_client_config)),
+            tls_connector: TlsConnector::from(Arc::new(config.tls_client_config)).early_data(true),
         };
 
         let client = Client::builder(config.executor)

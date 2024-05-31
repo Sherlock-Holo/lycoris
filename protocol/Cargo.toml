@@ -8,7 +8,7 @@ bytes = { workspace = true }
 event-listener = { workspace = true }
 futures-util = { workspace = true, features = ["io", "sink"] }
 futures-channel = { workspace = true, features = ["sink"] }
-futures-rustls = { workspace = true }
+futures-rustls = { workspace = true, features = ["early-data"] }
 http = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true, features = ["http2", "client"] }
