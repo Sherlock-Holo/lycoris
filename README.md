@@ -16,6 +16,7 @@ there are 3 parts about lycoris
 - lycoris-bpf
 - lycoris-client
 - lycoris-server
+- lycoris-protocol
 
 ### lycoris-bpf
 
@@ -33,6 +34,10 @@ bpf lru map, and send to `lycoris-server`
 
 `lycoris-server` is a simple proxy server, like [camouflage](https://github.com/Sherlock-Holo/camouflage), trojan or
 something else
+
+### lycoris-protocol
+
+`lycoris-protocol` provide a way to use lycoris transport protocol, it can base on any reliable transmission
 
 ## the ip list file
 
