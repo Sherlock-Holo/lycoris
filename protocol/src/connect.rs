@@ -147,7 +147,7 @@ impl<DR: DnsResolver + Sync + 'static, TC: TcpConnector + Sync + 'static> HyperC
 
         let reader = StreamReader::new(BodyStream::from(response.into_body()));
 
-        Ok((reader, SinkWriter::new(req_body_tx.into())))
+        Ok((Reader(reader), Writer(SinkWriter::new(req_body_tx.into()))))
     }
 }
 

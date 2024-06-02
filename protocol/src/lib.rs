@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use std::io::IoSlice;
 use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
 use std::task::{ready, Context, Poll};
@@ -11,6 +12,7 @@ use futures_rustls::TlsStream;
 use futures_util::{AsyncRead, AsyncWrite};
 use hyper::rt::ReadBufCursor;
 use hyper_util::client::legacy::connect::{Connected, Connection};
+use tokio::io::{AsyncRead as TAsyncRead, AsyncWrite as TAsyncWrite, ReadBuf};
 use tokio_util::io::{SinkWriter, StreamReader};
 
 use crate::hyper_body::{BodyStream, SinkBodySender};
@@ -21,8 +23,100 @@ pub mod connect;
 mod h2_config;
 mod hyper_body;
 
-pub type Reader = StreamReader<BodyStream, Bytes>;
-pub type Writer = SinkWriter<SinkBodySender<Infallible>>;
+#[derive(Debug)]
+pub struct Reader(StreamReader<BodyStream, Bytes>);
+
+impl AsyncRead for Reader {
+    #[inline]
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<io::Result<usize>> {
+        let mut read_buf = ReadBuf::new(buf);
+        ready!(Pin::new(&mut self.0).poll_read(cx, &mut read_buf))?;
+
+        Poll::Ready(Ok(read_buf.filled().len()))
+    }
+}
+
+impl TAsyncRead for Reader {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.0).poll_read(cx, buf)
+    }
+}
+
+#[derive(Debug)]
+pub struct Writer(SinkWriter<SinkBodySender<Infallible>>);
+
+impl AsyncWrite for Writer {
+    #[inline]
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.0).poll_write(cx, buf)
+    }
+
+    #[inline]
+    fn poll_write_vectored(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[IoSlice<'_>],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.0).poll_write_vectored(cx, bufs)
+    }
+
+    #[inline]
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.0).poll_flush(cx)
+    }
+
+    #[inline]
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.0).poll_shutdown(cx)
+    }
+}
+
+impl TAsyncWrite for Writer {
+    #[inline]
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.0).poll_write(cx, buf)
+    }
+
+    #[inline]
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.0).poll_flush(cx)
+    }
+
+    #[inline]
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.0).poll_shutdown(cx)
+    }
+
+    #[inline]
+    fn poll_write_vectored(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[IoSlice<'_>],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.0).poll_write_vectored(cx, bufs)
+    }
+
+    #[inline]
+    fn is_write_vectored(&self) -> bool {
+        self.0.is_write_vectored()
+    }
+}
 
 #[trait_make::make(Send)]
 pub trait DnsResolver: Clone {

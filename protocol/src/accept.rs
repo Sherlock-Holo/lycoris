@@ -239,7 +239,11 @@ impl HyperServerHandler {
         let sink_body_sender = SinkBodySender::from(body_tx);
 
         result_tx
-            .unbounded_send((addrs, SinkWriter::new(sink_body_sender), stream_reader))
+            .unbounded_send((
+                addrs,
+                Writer(SinkWriter::new(sink_body_sender)),
+                Reader(stream_reader),
+            ))
             .map_err(|err| Error::Other(err.into()))?;
 
         Ok(response)
