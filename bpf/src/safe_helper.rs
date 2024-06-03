@@ -1,6 +1,6 @@
 use core::ffi::c_long;
 
-use aya_bpf::helpers::gen;
+use aya_ebpf::helpers::gen;
 use unroll::unroll_for_loops;
 
 /// get current comm safe helper, will return nul index

@@ -1,6 +1,6 @@
-use aya_bpf::bindings::BPF_F_NO_PREALLOC;
-use aya_bpf::macros::map;
-use aya_bpf::maps::{Array, HashMap, LpmTrie, LruHashMap};
+use aya_ebpf::bindings::BPF_F_NO_PREALLOC;
+use aya_ebpf::macros::map;
+use aya_ebpf::maps::{Array, HashMap, LpmTrie, LruHashMap};
 
 use crate::{ConnectedIpv4Addr, ConnectedIpv6Addr, Ipv4Addr, Ipv6Addr};
 

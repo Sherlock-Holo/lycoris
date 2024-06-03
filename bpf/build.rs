@@ -12,7 +12,7 @@ fn main() {
 fn generate_require() {
     let bindings = bindgen::builder()
         .use_core()
-        .ctypes_prefix("::aya_bpf::cty")
+        .ctypes_prefix("::aya_ebpf::cty")
         .layout_tests(false)
         .generate_comments(false)
         .clang_arg("-Wno-unknown-attributes")

@@ -3,8 +3,8 @@
 
 use core::ffi::{c_int, c_uint};
 
-use aya_bpf::macros::{cgroup_sock_addr, sock_ops};
-use aya_bpf::programs::{SockAddrContext, SockOpsContext};
+use aya_ebpf::macros::{cgroup_sock_addr, sock_ops};
+use aya_ebpf::programs::{SockAddrContext, SockOpsContext};
 
 #[cgroup_sock_addr(connect4)]
 fn connect4(ctx: SockAddrContext) -> c_int {

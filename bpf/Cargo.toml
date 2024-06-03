@@ -1,14 +1,14 @@
 [package]
 name = "lycoris-bpf"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-aya-bpf = { git = "https://github.com/aya-rs/aya", rev = "80736c5" }
-aya-log-ebpf = { git = "https://github.com/aya-rs/aya", rev = "80736c5" }
+aya-ebpf = "0.1"
+aya-log-ebpf = "0.1"
 unroll = "0.1"
 
 [build-dependencies]

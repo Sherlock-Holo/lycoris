@@ -1,9 +1,9 @@
 use core::ffi::c_long;
 use core::ptr;
 
-use aya_bpf::helpers::*;
-use aya_bpf::maps::lpm_trie::Key;
-use aya_bpf::programs::SockAddrContext;
+use aya_ebpf::helpers::*;
+use aya_ebpf::maps::lpm_trie::Key;
+use aya_ebpf::programs::SockAddrContext;
 use aya_log_ebpf::debug;
 
 use crate::command_check::command_can_connect_directly;

@@ -1,9 +1,9 @@
 use core::ffi::c_long;
 use core::mem;
 
-use aya_bpf::bindings::BPF_SOCK_OPS_ACTIVE_ESTABLISHED_CB;
-use aya_bpf::helpers::*;
-use aya_bpf::programs::SockOpsContext;
+use aya_ebpf::bindings::BPF_SOCK_OPS_ACTIVE_ESTABLISHED_CB;
+use aya_ebpf::helpers::*;
+use aya_ebpf::programs::SockOpsContext;
 use aya_log_ebpf::debug;
 
 use crate::kernel_binding::require::{AF_INET, AF_INET6};

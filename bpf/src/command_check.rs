@@ -1,7 +1,7 @@
 use core::ffi::{c_long, CStr};
 use core::str::from_utf8_unchecked;
 
-use aya_bpf::programs::SockAddrContext;
+use aya_ebpf::programs::SockAddrContext;
 use aya_log_ebpf::debug;
 
 use crate::map::{COMM_MAP, COMM_MAP_MODE};
