@@ -3,8 +3,8 @@
 
 use core::ffi::{c_int, c_uint};
 
-use aya_ebpf::macros::{cgroup_sock_addr, sock_ops};
-use aya_ebpf::programs::{SockAddrContext, SockOpsContext};
+use aya_ebpf::macros::{cgroup_sock_addr, classifier, sock_ops};
+use aya_ebpf::programs::{SockAddrContext, SockOpsContext, TcContext};
 
 #[cgroup_sock_addr(connect4)]
 fn connect4(ctx: SockAddrContext) -> c_int {
@@ -25,6 +25,11 @@ fn established_connect(ctx: SockOpsContext) -> c_uint {
     let _ = lycoris_bpf::handle_sockops(ctx);
 
     1
+}
+
+#[classifier]
+fn assign_ingress(ctx: TcContext) -> c_int {
+    lycoris_bpf::assign_ingress(ctx).unwrap_or_else(|ret| ret)
 }
 
 #[panic_handler]

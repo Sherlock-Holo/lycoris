@@ -1199,6 +1199,8 @@ dependencies = [
  "aya-ebpf",
  "aya-log-ebpf",
  "bindgen",
+ "network-types",
+ "share",
  "unroll",
 ]
 
@@ -1311,6 +1313,12 @@ name = "mirai-annotations"
 version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c9be0862c1b3f26a88803c4a49de6889c10e608b3ee9344e6ef5b45fb37ad3d1"
+
+[[package]]
+name = "network-types"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41b13eba62f530cd2ea031938ac4472b9b649694baa1e587c2a2fadc07844d3c"
 
 [[package]]
 name = "nom"

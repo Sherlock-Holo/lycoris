@@ -4,6 +4,7 @@ use core::mem;
 
 pub use cgroup_connect4::handle_cgroup_connect4;
 pub use cgroup_connect6::handle_cgroup_connect6;
+pub use sk_assign::assign_ingress;
 pub use sockops_callback::handle_sockops;
 
 mod cgroup_connect4;
@@ -12,6 +13,7 @@ mod command_check;
 mod kernel_binding;
 mod map;
 mod safe_helper;
+mod sk_assign;
 mod sockops_callback;
 
 #[repr(C)]

@@ -9,7 +9,10 @@ license = "MIT"
 [dependencies]
 aya-ebpf = "0.1"
 aya-log-ebpf = "0.1"
+network-types = "0.0.6"
 unroll = "0.1"
+
+share = { path = "../share" }
 
 [build-dependencies]
 bindgen = "0.69"

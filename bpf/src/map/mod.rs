@@ -1,6 +1,6 @@
 use aya_ebpf::bindings::BPF_F_NO_PREALLOC;
 use aya_ebpf::macros::map;
-use aya_ebpf::maps::{Array, HashMap, LpmTrie, LruHashMap};
+use aya_ebpf::maps::{Array, HashMap, LpmTrie, LruHashMap, SockMap};
 
 use crate::{ConnectedIpv4Addr, ConnectedIpv6Addr, Ipv4Addr, Ipv6Addr};
 
@@ -61,3 +61,7 @@ pub static COMM_MAP: HashMap<[u8; 16], u8> = HashMap::with_max_entries(1024, 0);
 /// `1` means when comm not in [`COMM_MAP`], connect directly
 #[map]
 pub static COMM_MAP_MODE: Array<u8> = Array::with_max_entries(1, 0);
+
+/// proxy client listening socket map
+#[map]
+pub static ASSIGN_SOCK_MAP: SockMap = SockMap::with_max_entries(2, 0);
