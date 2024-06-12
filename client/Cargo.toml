@@ -17,17 +17,19 @@ http = { workspace = true }
 hyper = { workspace = true, features = ["http2", "client"] }
 hyper-util = { workspace = true, features = ["client-legacy", "http2", "tokio"] }
 http-body-util = { workspace = true }
+netlink-packet-route = { workspace = true }
 futures-channel = { workspace = true, features = ["sink"] }
 futures-rustls = { workspace = true }
 futures-util = { workspace = true, features = ["io"] }
 libc = { workspace = true }
+rtnetlink = { workspace = true, default-features = true }
 rustls-native-certs = { workspace = true }
 rustls-pemfile = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_yaml = { workspace = true }
 socket2 = { workspace = true }
 tap = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net", "io-util", "fs", "sync", "time"] }
+tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-stream = { workspace = true, features = ["time", "io-util", "net"] }
 tokio-util = { workspace = true, features = ["compat", "io"] }
 tracing = { workspace = true }
