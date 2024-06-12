@@ -10,3 +10,5 @@ pub const PROXY_IPV6_CLIENT: &str = "PROXY_IPV6_CLIENT";
 
 pub const COMM_MAP: &str = "COMM_MAP";
 pub const COMM_MAP_MODE: &str = "COMM_MAP_MODE";
+
+pub const ASSIGN_SOCK_MAP: &str = "ASSIGN_SOCK_MAP";

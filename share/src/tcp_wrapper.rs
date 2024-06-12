@@ -67,6 +67,7 @@ impl AsyncWrite for TokioTcp {
     }
 }
 
+#[derive(Debug)]
 pub struct TcpListenerAddrStream {
     listener: TcpListener,
 }

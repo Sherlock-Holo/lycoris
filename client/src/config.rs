@@ -7,8 +7,6 @@ use serde::Deserialize;
 pub struct Config {
     pub listen_addr: SocketAddrV4,
     pub listen_addr_v6: SocketAddrV6,
-    pub container_bridge_listen_addr: Option<SocketAddrV4>,
-    pub container_bridge_listen_addr_v6: Option<SocketAddrV6>,
     pub remote_domain: String,
     pub remote_port: Option<u16>,
     pub ca_cert: Option<PathBuf>,
@@ -23,6 +21,8 @@ pub struct Config {
     pub command_in_list_directly: bool,
     #[serde(default)]
     pub ip_list: Vec<PathBuf>,
+    #[serde(default)]
+    pub container_bridge_iface: Vec<String>,
 }
 
 impl Config {

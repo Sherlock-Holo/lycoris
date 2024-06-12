@@ -1,14 +1,19 @@
 #![feature(impl_trait_in_assoc_type)]
+#![feature(async_drop)]
 
 use std::ffi::CString;
+use std::future::async_drop;
+use std::io::ErrorKind;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6};
 use std::path::Path;
 use std::str::FromStr;
 
+use anyhow::Context;
 use aya::maps::lpm_trie::{Key, LpmTrie};
 use aya::maps::Array;
 use aya::programs::cgroup_sock_addr::CgroupSockAddrLink;
-use aya::programs::{CgroupSockAddr, Link, SockOps};
+use aya::programs::tc::SchedClassifierLink;
+use aya::programs::{tc, CgroupSockAddr, Link, SchedClassifier, SockOps, TcAttachType};
 use aya::{maps, Bpf};
 use aya_log::BpfLogger;
 use cidr::{Ipv4Inet, Ipv6Inet};
@@ -22,6 +27,7 @@ use share::helper::Ipv6AddrExt;
 use share::log::init_log;
 use tokio::fs::{self, File};
 use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::{select, signal};
 use tokio_stream::wrappers::LinesStream;
 use tracing::{info, warn};
 use tracing_log::LogTracer;
@@ -43,6 +49,7 @@ pub mod bpf_share;
 mod client;
 mod config;
 mod connect;
+mod container;
 mod listener;
 mod mptcp;
 mod owned_link;
@@ -72,13 +79,7 @@ async fn run_bpf(args: Args, config: Config) -> anyhow::Result<()> {
 
     init_bpf_log(&mut bpf);
 
-    set_proxy_addr(
-        &mut bpf,
-        config.listen_addr,
-        config.listen_addr_v6,
-        config.container_bridge_listen_addr,
-        config.container_bridge_listen_addr_v6,
-    )?;
+    set_proxy_addr(&mut bpf, config.listen_addr, config.listen_addr_v6)?;
 
     info!(listen_addr = %config.listen_addr, "set proxy addr done");
 
@@ -112,14 +113,16 @@ async fn run_bpf(args: Args, config: Config) -> anyhow::Result<()> {
 
     info!("load sockops done");
 
-    let bpf_listener = load_listener(
-        &mut bpf,
-        config.listen_addr,
-        config.listen_addr_v6,
-        config.container_bridge_listen_addr,
-        config.container_bridge_listen_addr_v6,
-    )
-    .await?;
+    let container_guard = if !config.container_bridge_iface.is_empty() {
+        let links = load_sk_assign(&mut bpf, &config.container_bridge_iface)?;
+        let route_rule_guard = container::enable_container_route().await?;
+
+        Some((links, route_rule_guard))
+    } else {
+        None
+    };
+
+    let bpf_listener = load_listener(&mut bpf, config.listen_addr, config.listen_addr_v6).await?;
 
     info!("load listener done");
 
@@ -136,7 +139,19 @@ async fn run_bpf(args: Args, config: Config) -> anyhow::Result<()> {
 
     let mut client = Client::new(connector, bpf_listener);
 
-    client.start().await
+    select! {
+        res = client.start() => {
+            res?;
+        }
+
+        _ = signal::ctrl_c() => {}
+    }
+
+    if let Some((_, guard)) = container_guard {
+        async_drop(guard).await
+    }
+
+    Ok(())
 }
 
 async fn load_connect4(
@@ -206,12 +221,47 @@ async fn load_established_sockops(
     Ok(OwnedLink::from(prog.take_link(link_id)?))
 }
 
+fn load_sk_assign(
+    bpf: &mut Bpf,
+    container_bridge_iface: &[String],
+) -> anyhow::Result<Vec<OwnedLink<SchedClassifierLink>>> {
+    let sk_assign: &mut SchedClassifier = bpf
+        .program_mut("assign_ingress")
+        .expect("bpf assign_ingress not found")
+        .try_into()?;
+
+    let mut links = Vec::with_capacity(container_bridge_iface.len());
+    for iface in container_bridge_iface {
+        match tc::qdisc_add_clsact(iface) {
+            Err(err) if err.kind() == ErrorKind::AlreadyExists => {}
+            Err(err) => {
+                return Err(err).with_context(|| {
+                    format!("add tc qdisc clsact to container bridge iface {iface} failed")
+                });
+            }
+            Ok(_) => {}
+        }
+
+        let link_id = sk_assign
+            .attach(iface, TcAttachType::Ingress)
+            .with_context(|| {
+                format!("attach sk_assign to container bridge iface {iface} failed")
+            })?;
+
+        let link = sk_assign.take_link(link_id).with_context(|| {
+            format!("take sk_assign link in container bridge iface {iface} failed")
+        })?;
+
+        links.push(OwnedLink::from(link));
+    }
+
+    Ok(links)
+}
+
 fn set_proxy_addr(
     bpf: &mut Bpf,
     mut addr: SocketAddrV4,
     mut addr_v6: SocketAddrV6,
-    container_bridge_listen_addr: Option<SocketAddrV4>,
-    container_bridge_listen_addr_v6: Option<SocketAddrV6>,
 ) -> anyhow::Result<()> {
     let mut v4_proxy_server: Array<_, ShareIpv4Addr> = bpf
         .map_mut(PROXY_IPV4_CLIENT)
@@ -231,16 +281,6 @@ fn set_proxy_addr(
 
     v4_proxy_server.set(0, proxy_addr, 0)?;
 
-    if let Some(addr) = container_bridge_listen_addr {
-        let proxy_addr = ShareIpv4Addr {
-            addr: addr.ip().octets(),
-            port: addr.port(),
-            _padding: [0; 2],
-        };
-
-        v4_proxy_server.set(1, proxy_addr, 0)?;
-    }
-
     let mut v6_proxy_server: Array<_, ShareIpv6Addr> = bpf
         .map_mut(PROXY_IPV6_CLIENT)
         .expect("PROXY_IPV6_CLIENT bpf array not found")
@@ -258,15 +298,6 @@ fn set_proxy_addr(
 
     v6_proxy_server.set(0, proxy_addr, 0)?;
 
-    if let Some(addr_v6) = container_bridge_listen_addr_v6 {
-        let proxy_addr = ShareIpv6Addr {
-            addr: addr_v6.ip().network_order_segments(),
-            port: addr_v6.port(),
-        };
-
-        v6_proxy_server.set(0, proxy_addr, 0)?;
-    }
-
     Ok(())
 }
 
@@ -274,24 +305,25 @@ async fn load_listener(
     bpf: &mut Bpf,
     listen_addr: SocketAddrV4,
     listen_addr_v6: SocketAddrV6,
-    container_bridge_listen_addr: Option<SocketAddrV4>,
-    container_bridge_listen_addr_v6: Option<SocketAddrV6>,
 ) -> anyhow::Result<BpfListener> {
-    let ipv4_map_ref_mut = bpf
+    let ipv4_map = bpf
         .take_map(IPV4_ADDR_MAP)
         .expect("IPV4_ADDR_MAP bpf lru map not found");
 
-    let ipv6_map_ref_mut = bpf
+    let ipv6_map = bpf
         .take_map(IPV6_ADDR_MAP)
         .expect("IPV6_ADDR_MAP bpf lru map not found");
+
+    let assign_sock_map = bpf
+        .take_map(ASSIGN_SOCK_MAP)
+        .expect("ASSIGN_SOCK_MAP bpf sock map not found");
 
     BpfListener::new(
         listen_addr,
         listen_addr_v6,
-        container_bridge_listen_addr,
-        container_bridge_listen_addr_v6,
-        ipv4_map_ref_mut,
-        ipv6_map_ref_mut,
+        ipv4_map,
+        ipv6_map,
+        assign_sock_map,
     )
     .await
 }
