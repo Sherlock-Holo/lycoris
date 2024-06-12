@@ -51,7 +51,7 @@ impl<Map: LimitedBpfHashMap<ConnectedIpv4Addr, ShareIpv4Addr>> DstAddrLookup<Map
             let mut map = self.dst_addr_map.lock().await;
             match map.get(connected_addr) {
                 Err(MapError::KeyNotFound) => {
-                    time::sleep(Duration::from_millis(50)).await;
+                    time::sleep(Duration::from_millis(10)).await;
 
                     continue;
                 }
@@ -93,7 +93,7 @@ impl<Map: LimitedBpfHashMap<ConnectedIpv6Addr, ShareIpv6Addr>> DstAddrLookup<Map
             let mut map = self.dst_addr_map.lock().await;
             match map.get(connected_addr) {
                 Err(MapError::KeyNotFound) => {
-                    time::sleep(Duration::from_millis(50)).await;
+                    time::sleep(Duration::from_millis(10)).await;
 
                     continue;
                 }
