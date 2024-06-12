@@ -1,5 +1,4 @@
 use core::ffi::{c_int, c_long, c_void};
-use core::mem;
 use core::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use core::num::NonZeroUsize;
 use core::ptr::{addr_of_mut, NonNull};
@@ -65,7 +64,7 @@ fn get_tcp_ports(ctx: &mut TcContext, eth_type: EtherType) -> Option<(u16, u16)>
         EtherType::Ipv4 => {
             let tcp_hdr = ctx
                 .void_data()
-                .wrapping_byte_add(mem::size_of::<EthHdr>() + mem::size_of::<Ipv4Hdr>())
+                .wrapping_byte_add(size_of::<EthHdr>() + size_of::<Ipv4Hdr>())
                 as *mut TcpHdr;
             if tcp_hdr.wrapping_add(1) > ctx.void_data_end().cast() {
                 return None;
@@ -77,7 +76,7 @@ fn get_tcp_ports(ctx: &mut TcContext, eth_type: EtherType) -> Option<(u16, u16)>
         EtherType::Ipv6 => {
             let tcp_hdr = ctx
                 .void_data()
-                .wrapping_byte_add(mem::size_of::<EthHdr>() + mem::size_of::<Ipv6Hdr>())
+                .wrapping_byte_add(size_of::<EthHdr>() + size_of::<Ipv6Hdr>())
                 as *mut TcpHdr;
             if tcp_hdr.wrapping_add(1) > ctx.void_data_end().cast() {
                 return None;
@@ -102,7 +101,7 @@ fn get_udp_ports(ctx: &mut TcContext, eth_type: EtherType) -> Option<(u16, u16)>
         EtherType::Ipv4 => {
             let udp_hdr = ctx
                 .void_data()
-                .wrapping_byte_add(mem::size_of::<EthHdr>() + mem::size_of::<Ipv4Hdr>())
+                .wrapping_byte_add(size_of::<EthHdr>() + size_of::<Ipv4Hdr>())
                 as *mut UdpHdr;
             if udp_hdr.wrapping_add(1) > ctx.void_data_end().cast() {
                 return None;
@@ -114,7 +113,7 @@ fn get_udp_ports(ctx: &mut TcContext, eth_type: EtherType) -> Option<(u16, u16)>
         EtherType::Ipv6 => {
             let udp_hdr = ctx
                 .void_data()
-                .wrapping_byte_add(mem::size_of::<EthHdr>() + mem::size_of::<Ipv6Hdr>())
+                .wrapping_byte_add(size_of::<EthHdr>() + size_of::<Ipv6Hdr>())
                 as *mut UdpHdr;
             if udp_hdr.wrapping_add(1) > ctx.void_data_end().cast() {
                 return None;
@@ -361,7 +360,7 @@ fn get_tuple(ctx: &mut TcContext) -> Option<TupleWithAddrs> {
     match ether_type {
         EtherType::Ipv4 => {
             let ip_hdr = data
-                .wrapping_byte_add(mem::size_of::<EthHdr>())
+                .wrapping_byte_add(size_of::<EthHdr>())
                 .cast::<Ipv4Hdr>();
             if ip_hdr.wrapping_add(1) > data_end.cast() {
                 return None;
@@ -386,7 +385,7 @@ fn get_tuple(ctx: &mut TcContext) -> Option<TupleWithAddrs> {
 
         EtherType::Ipv6 => {
             let ip_hdr = data
-                .wrapping_byte_add(mem::size_of::<EthHdr>())
+                .wrapping_byte_add(size_of::<EthHdr>())
                 .cast::<Ipv6Hdr>();
             if ip_hdr.wrapping_add(1) > data_end.cast() {
                 return None;
@@ -442,9 +441,9 @@ impl BpfSockTupleExt for bpf_sock_tuple {
     fn tuple_len(&self, eth_type: EtherType) -> Option<usize> {
         unsafe {
             match eth_type {
-                EtherType::Ipv4 => Some(mem::size_of_val(&self.__bindgen_anon_1.ipv4)),
+                EtherType::Ipv4 => Some(size_of_val(&self.__bindgen_anon_1.ipv4)),
 
-                EtherType::Ipv6 => Some(mem::size_of_val(&self.__bindgen_anon_1.ipv6)),
+                EtherType::Ipv6 => Some(size_of_val(&self.__bindgen_anon_1.ipv6)),
 
                 _ => None,
             }
