@@ -20,10 +20,12 @@ http-body-util = { workspace = true }
 futures-channel = { workspace = true, features = ["sink"] }
 futures-rustls = { workspace = true }
 futures-util = { workspace = true, features = ["io"] }
+libc = { workspace = true }
 rustls-native-certs = { workspace = true }
 rustls-pemfile = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_yaml = { workspace = true }
+socket2 = { workspace = true }
 tap = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net", "io-util", "fs", "sync", "time"] }
 tokio-stream = { workspace = true, features = ["time", "io-util", "net"] }

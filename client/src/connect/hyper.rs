@@ -10,6 +10,7 @@ use share::tcp_wrapper::TokioTcp;
 use tokio::net::TcpStream;
 
 use super::Connect;
+use crate::mptcp::MptcpExt;
 
 #[derive(Debug, Default, Clone)]
 struct TokioConnector;
@@ -18,7 +19,7 @@ impl TcpConnector for TokioConnector {
     type ConnectedTcpStream = TokioTcp;
 
     async fn connect(&mut self, addr: SocketAddr) -> io::Result<Self::ConnectedTcpStream> {
-        let tcp_stream = TcpStream::connect(addr).await?;
+        let tcp_stream = TcpStream::connect_mptcp([addr]).await?;
 
         Ok(TokioTcp::from(tcp_stream))
     }

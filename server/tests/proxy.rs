@@ -13,7 +13,7 @@ use hyper::body::Frame;
 use hyper_rustls::{FixedServerNameResolver, HttpsConnectorBuilder};
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::{TokioExecutor, TokioTimer};
-use lycoris_server::HyperServer;
+use lycoris_server::{HyperServer, MptcpListenerExt};
 use protocol::auth::Auth;
 use share::log::init_log;
 use tokio::fs;
@@ -39,7 +39,9 @@ async fn main() {
         .unwrap();
     let client_config = create_client_config().await;
 
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let listener = TcpListener::listen_mptcp("127.0.0.1:0".parse().unwrap())
+        .await
+        .unwrap();
     let addr = listener.local_addr().unwrap();
     let server = HyperServer::new(TOTP_HEADER.to_string(), auth, listener, server_config).unwrap();
 
@@ -65,7 +67,9 @@ async fn main() {
     let totp = create_totp(TOTP_SECRET.to_string());
     let secret = totp.generate_current().unwrap();
 
-    let remote_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let remote_listener = TcpListener::listen_mptcp("127.0.0.1:0".parse().unwrap())
+        .await
+        .unwrap();
     let remote_addr = remote_listener.local_addr().unwrap();
 
     let task = tokio::spawn(async move {

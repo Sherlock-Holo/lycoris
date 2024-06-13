@@ -16,9 +16,11 @@ http = { workspace = true }
 hyper = { workspace = true, features = ["http2", "http1", "server"] }
 http-body-util = { workspace = true }
 hyper-util = { workspace = true, features = ["server", "server-auto", "http1", "http2", "tokio"] }
+libc = { workspace = true }
 rustls-pemfile = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_yaml = { workspace = true }
+socket2 = { workspace = true }
 tap = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net", "io-util", "fs"] }
 tracing = { workspace = true }

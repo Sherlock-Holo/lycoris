@@ -44,6 +44,7 @@ mod client;
 mod config;
 mod connect;
 mod listener;
+mod mptcp;
 mod owned_link;
 
 pub async fn run() -> anyhow::Result<()> {

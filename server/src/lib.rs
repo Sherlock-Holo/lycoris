@@ -12,14 +12,17 @@ use tokio::fs;
 use tokio::net::TcpListener;
 use tracing::info;
 
-use crate::config::Config;
-pub use crate::err::Error;
+use self::config::Config;
+pub use self::err::Error;
 #[doc(hidden)]
-pub use crate::server::HyperServer;
+pub use self::mptcp::MptcpListenerExt;
+#[doc(hidden)]
+pub use self::server::HyperServer;
 
 mod args;
 mod config;
 mod err;
+mod mptcp;
 mod server;
 
 pub async fn run() -> Result<(), Error> {
@@ -37,7 +40,7 @@ pub async fn run() -> Result<(), Error> {
         .with_no_client_auth()
         .with_single_cert(certs, keys.remove(0).into())?;
 
-    let tcp_listener = TcpListener::bind(config.listen_addr).await?;
+    let tcp_listener = TcpListener::listen_mptcp(config.listen_addr).await?;
 
     info!(listen_addr = %config.listen_addr, "start listen");
 
