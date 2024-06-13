@@ -1,22 +1,33 @@
 use std::future::Future;
-use std::io;
 
 use futures_rustls::rustls::ServerConfig;
-use futures_util::{Stream, StreamExt, TryStreamExt};
+use futures_util::StreamExt;
 use hyper_util::rt::TokioTimer;
 use protocol::accept::Executor;
 use protocol::auth::Auth;
 use protocol::HyperListener;
 use share::dns::HickoryDnsResolver;
 use share::proxy;
-use share::tcp_wrapper::{TcpListenerAddrStream, TokioTcp};
 use tap::TapFallible;
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{error, info};
 
+use self::hidden::*;
 use crate::Error;
 
-type TokioTcpAcceptor = impl Stream<Item = io::Result<TokioTcp>> + Send + Unpin;
+mod hidden {
+    use std::io;
+
+    use futures_util::{Stream, TryStreamExt};
+    use share::tcp_wrapper::{TcpListenerAddrStream, TokioTcp};
+    use tokio::net::TcpListener;
+
+    pub type TokioTcpAcceptor = impl Stream<Item = io::Result<TokioTcp>> + Send + Unpin;
+
+    pub fn new_it(tcp_listener: TcpListener) -> TokioTcpAcceptor {
+        TcpListenerAddrStream::from(tcp_listener).map_ok(|(stream, _)| TokioTcp::from(stream))
+    }
+}
 
 pub struct HyperServer {
     protocol_listener: HyperListener<TokioTcpAcceptor, TokioExecutorWrapper, HickoryDnsResolver>,
@@ -42,8 +53,7 @@ impl HyperServer {
         tcp_listener: TcpListener,
         server_tls_config: ServerConfig,
     ) -> Result<Self, Error> {
-        let tcp_listener =
-            TcpListenerAddrStream::from(tcp_listener).map_ok(|(stream, _)| TokioTcp::from(stream));
+        let tcp_listener = new_it(tcp_listener);
 
         let protocol_listener = HyperListener::new(
             tcp_listener,
