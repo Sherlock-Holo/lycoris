@@ -117,6 +117,8 @@ async fn run_bpf(args: Args, config: Config) -> anyhow::Result<()> {
         let links = load_sk_assign(&mut bpf, &config.container_bridge_iface)?;
         let route_rule_guard = container::enable_container_route().await?;
 
+        info!(?config.container_bridge_iface, "load container bridge iface sk_assign done");
+
         Some((links, route_rule_guard))
     } else {
         None

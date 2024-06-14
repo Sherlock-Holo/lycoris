@@ -42,8 +42,8 @@ impl BpfListener {
     pub async fn new(
         listen_addr: SocketAddrV4,
         listen_addr_v6: SocketAddrV6,
-        mut ipv4_map: Map,
-        mut ipv6_map: Map,
+        ipv4_map: Map,
+        ipv6_map: Map,
         assign_sock_map: Map,
     ) -> anyhow::Result<Self> {
         let tcp_listener = TcpListener::bind(listen_addr)
@@ -68,18 +68,6 @@ impl BpfListener {
         ];
 
         let tcp_listeners = stream::select_all(listeners);
-
-        // fix can't HashMap::try_from
-        ipv4_map = match ipv4_map {
-            Map::LruHashMap(map_data) => Map::HashMap(map_data),
-            _ => unreachable!(),
-        };
-
-        // fix can't HashMap::try_from
-        ipv6_map = match ipv6_map {
-            Map::LruHashMap(map_data) => Map::HashMap(map_data),
-            _ => unreachable!(),
-        };
 
         let v4_dst_addr_map = DstAddrLookup::new(
             HashMap::try_from(ipv4_map).tap_err(|err| error!(%err, "create bpf hashmap failed"))?,
