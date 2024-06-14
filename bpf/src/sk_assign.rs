@@ -6,18 +6,15 @@ use core::ptr::{addr_of_mut, NonNull};
 use aya_ebpf::bindings::{
     bpf_sock, bpf_sock_tuple, BPF_F_CURRENT_NETNS, BPF_TCP_LISTEN, TC_ACT_OK, TC_ACT_SHOT,
 };
-use aya_ebpf::helpers::{
-    bpf_map_lookup_elem, bpf_sk_assign, bpf_sk_lookup_udp, bpf_sk_release, bpf_skc_lookup_tcp,
-};
+use aya_ebpf::helpers::{bpf_map_lookup_elem, bpf_sk_assign, bpf_sk_release, bpf_skc_lookup_tcp};
 use aya_ebpf::maps::lpm_trie::Key;
 use aya_ebpf::programs::TcContext;
 use aya_ebpf::EbpfContext;
 use aya_log_ebpf::macro_support::IpFormatter;
-use aya_log_ebpf::{debug, error, info, WriteToBuf};
+use aya_log_ebpf::{debug, error, WriteToBuf};
 use network_types::eth::{EthHdr, EtherType};
 use network_types::ip::{IpProto, Ipv4Hdr, Ipv6Hdr};
 use network_types::tcp::TcpHdr;
-use network_types::udp::UdpHdr;
 use share::route::FWMARK;
 
 use crate::connect_directly;
@@ -96,7 +93,7 @@ fn get_tcp_ports(ctx: &mut TcContext, eth_type: EtherType) -> Option<(u16, u16)>
     }
 }
 
-fn get_udp_ports(ctx: &mut TcContext, eth_type: EtherType) -> Option<(u16, u16)> {
+/*fn get_udp_ports(ctx: &mut TcContext, eth_type: EtherType) -> Option<(u16, u16)> {
     let udp_hdr = match eth_type {
         EtherType::Ipv4 => {
             let udp_hdr = ctx
@@ -131,7 +128,7 @@ fn get_udp_ports(ctx: &mut TcContext, eth_type: EtherType) -> Option<(u16, u16)>
             u16::from_be((*udp_hdr).dest),
         ))
     }
-}
+}*/
 
 fn handle_tcp(
     ctx: &mut TcContext,
@@ -182,7 +179,9 @@ fn handle_tcp(
     debug!(ctx, "tcp tuple sk is null");
 
     let (src_port, dst_port) = get_tcp_ports(ctx, eth_type).ok_or(TC_ACT_OK)?;
-    let index = 0 as c_int;
+
+    let index = if dst_ip.is_ipv4() { 0 } else { 1 };
+
     unsafe {
         let sk = bpf_map_lookup_elem(
             &ASSIGN_SOCK_MAP as *const _ as *mut _,
@@ -204,7 +203,7 @@ fn handle_tcp(
         let ret = bpf_sk_assign(ctx.as_ptr(), sk as _, 0);
         bpf_sk_release(sk as _);
 
-        info!(
+        debug!(
             ctx,
             "assign skb (from {:i}:{}, to {:i}:{}) to tcp listening sk, ret {}",
             DisplayIpAddr(src_ip),
@@ -267,13 +266,15 @@ fn should_proxy(ctx: &mut TcContext, dst_ip: IpAddr) -> Result<bool, c_int> {
 }
 
 fn handle_udp(
-    ctx: &mut TcContext,
-    src_ip: IpAddr,
-    dst_ip: IpAddr,
-    tuple: &mut bpf_sock_tuple,
-    eth_type: EtherType,
+    _ctx: &mut TcContext,
+    _src_ip: IpAddr,
+    _dst_ip: IpAddr,
+    _tuple: &mut bpf_sock_tuple,
+    _eth_type: EtherType,
 ) -> Result<c_int, c_int> {
-    if !should_proxy(ctx, dst_ip)? {
+    // UDP not supported now
+    Ok(TC_ACT_OK)
+    /*if !should_proxy(ctx, dst_ip)? {
         return Ok(TC_ACT_OK);
     }
 
@@ -335,7 +336,7 @@ fn handle_udp(
         );
 
         Ok(ret as _)
-    }
+    }*/
 }
 
 struct TupleWithAddrs {
