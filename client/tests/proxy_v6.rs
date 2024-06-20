@@ -6,11 +6,11 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use aya::{Bpf, BpfLoader};
-use aya::maps::Array;
 use aya::maps::lpm_trie::{Key, LpmTrie};
-use aya::programs::{CgroupSockAddr, SockOps};
+use aya::maps::Array;
 use aya::programs::cgroup_sock_addr::CgroupSockAddrLink;
+use aya::programs::{CgroupSockAddr, SockOps};
+use aya::{Bpf, BpfLoader};
 use aya_log::BpfLogger;
 use bytes::Bytes;
 use cidr::Ipv6Inet;
@@ -20,7 +20,13 @@ use futures_rustls::TlsAcceptor;
 use futures_util::StreamExt;
 use h2::server;
 use http::{HeaderMap, Response};
+use lycoris_client::bpf_map_name::*;
+use lycoris_client::bpf_share::{Ipv4Addr, Ipv6Addr};
+use lycoris_client::{BpfListener, Client, HyperConnector, OwnedLink};
+use protocol::auth::Auth;
 use rustix::process::getuid;
+use share::helper::Ipv6AddrExt;
+use share::log::init_log;
 use tokio::fs;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
@@ -28,13 +34,6 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::info;
 use tracing_log::LogTracer;
-
-use lycoris_client::{BpfListener, Client, HyperConnector, OwnedLink};
-use lycoris_client::bpf_map_name::*;
-use lycoris_client::bpf_share::{Ipv4Addr, Ipv6Addr};
-use protocol::auth::Auth;
-use share::helper::Ipv6AddrExt;
-use share::log::init_log;
 
 const CGROUP_PATH: &str = "/sys/fs/cgroup";
 const BPF_ELF: &str = "../target/bpfel-unknown-none/release/lycoris-bpf";
@@ -79,6 +78,7 @@ async fn main() {
     load_target_ip(&mut bpf);
 
     let _connect6_link = load_connect6(&mut bpf, Path::new(CGROUP_PATH)).await;
+    let _getsockname_link = load_getsockname6(&mut bpf, Path::new(CGROUP_PATH)).await;
     let _sockops_link = load_established_sockops(&mut bpf, Path::new(CGROUP_PATH)).await;
 
     let h2_server_addr = start_server().await;
@@ -225,6 +225,26 @@ async fn load_connect6(bpf: &mut Bpf, cgroup_path: &Path) -> OwnedLink<CgroupSoc
     info!(?cgroup_path, "attach cgroup done");
 
     connect6_prog.take_link(connect6_link_id).unwrap().into()
+}
+
+async fn load_getsockname6(bpf: &mut Bpf, cgroup_path: &Path) -> OwnedLink<CgroupSockAddrLink> {
+    let cgroup_file = File::open(cgroup_path).await.unwrap();
+
+    let prog: &mut CgroupSockAddr = bpf
+        .program_mut("getsockname6")
+        .expect("bpf getsockname6 not found")
+        .try_into()
+        .unwrap();
+
+    prog.load().unwrap();
+
+    info!("load getsockname6 done");
+
+    let link_id = prog.attach(cgroup_file).unwrap();
+
+    info!(?cgroup_path, "attach cgroup done");
+
+    prog.take_link(link_id).unwrap().into()
 }
 
 // return Box<dyn Any> because the SockOpsLink is un-exported

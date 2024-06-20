@@ -109,6 +109,9 @@ async fn run_bpf(args: Args, config: Config) -> anyhow::Result<()> {
 
     let _connect6_link = load_connect6(&mut bpf, &config.cgroup_path).await?;
 
+    let _getsockname4 = load_getsockname4(&mut bpf, &config.cgroup_path).await?;
+    let _getsockname6 = load_getsockname6(&mut bpf, &config.cgroup_path).await?;
+
     let _sockops_link = load_established_sockops(&mut bpf, &config.cgroup_path).await?;
 
     info!("load sockops done");
@@ -181,6 +184,50 @@ async fn load_connect6(
     info!(?cgroup_path, "attach cgroup done");
 
     Ok(connect6_prog.take_link(connect6_link_id)?.into())
+}
+
+async fn load_getsockname4(
+    bpf: &mut Bpf,
+    cgroup_path: &Path,
+) -> anyhow::Result<OwnedLink<CgroupSockAddrLink>> {
+    let cgroup_file = File::open(cgroup_path).await?;
+
+    let prog: &mut CgroupSockAddr = bpf
+        .program_mut("getsockname4")
+        .expect("bpf getsockname4 not found")
+        .try_into()?;
+
+    prog.load()?;
+
+    info!("load getsockname4 done");
+
+    let link_id = prog.attach(cgroup_file)?;
+
+    info!(?cgroup_path, "attach cgroup done");
+
+    Ok(prog.take_link(link_id)?.into())
+}
+
+async fn load_getsockname6(
+    bpf: &mut Bpf,
+    cgroup_path: &Path,
+) -> anyhow::Result<OwnedLink<CgroupSockAddrLink>> {
+    let cgroup_file = File::open(cgroup_path).await?;
+
+    let prog: &mut CgroupSockAddr = bpf
+        .program_mut("getsockname6")
+        .expect("bpf getsockname4 not found")
+        .try_into()?;
+
+    prog.load()?;
+
+    info!("load getsockname6 done");
+
+    let link_id = prog.attach(cgroup_file)?;
+
+    info!(?cgroup_path, "attach cgroup done");
+
+    Ok(prog.take_link(link_id)?.into())
 }
 
 // return OwnedLink<impl Link> because the SockOpsLink is un-exported
