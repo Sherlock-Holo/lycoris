@@ -210,10 +210,19 @@ async fn load_listener(
     let ipv6_map = bpf
         .take_map(IPV6_ADDR_MAP)
         .expect("IPV6_ADDR_MAP bpf lru map not found");
+    let assign_sock_map = bpf
+        .take_map(ASSIGN_SOCK_MAP)
+        .expect("ASSIGN_SOCK_MAP bpf sock map not found");
 
-    BpfListener::new(listen_addr, listen_addr_v6, None, None, ipv4_map, ipv6_map)
-        .await
-        .unwrap()
+    BpfListener::new(
+        listen_addr,
+        listen_addr_v6,
+        ipv4_map,
+        ipv6_map,
+        assign_sock_map,
+    )
+    .await
+    .unwrap()
 }
 
 async fn load_connect4(bpf: &mut Bpf, cgroup_path: &Path) -> OwnedLink<CgroupSockAddrLink> {
