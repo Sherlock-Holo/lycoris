@@ -9,7 +9,7 @@ use aya::maps::lpm_trie::{Key, LpmTrie};
 use aya::maps::Array;
 use aya::programs::cgroup_sock_addr::CgroupSockAddrLink;
 use aya::programs::{CgroupSockAddr, Link, SockOps};
-use aya::{maps, Bpf};
+use aya::{maps, Bpf, BpfLoader};
 use aya_log::BpfLogger;
 use cidr::{Ipv4Inet, Ipv6Inet};
 use clap::Parser;
@@ -36,7 +36,6 @@ pub use crate::connect::hyper::HyperConnector;
 pub use crate::listener::bpf::BpfListener;
 pub use crate::owned_link::OwnedLink;
 
-mod addr;
 mod args;
 pub mod bpf_map_name;
 pub mod bpf_share;
@@ -66,7 +65,9 @@ async fn run_bpf(args: Args, config: Config) -> anyhow::Result<()> {
 
     info!(?remote_domain_ips, "get remote domain ip done");
 
-    let mut bpf = Bpf::load_file(&args.bpf_elf)?;
+    let mut bpf = BpfLoader::new()
+        .allow_unsupported_maps()
+        .load_file(&args.bpf_elf)?;
 
     info!("load bpf done");
 
@@ -113,7 +114,6 @@ async fn run_bpf(args: Args, config: Config) -> anyhow::Result<()> {
     info!("load sockops done");
 
     let bpf_listener = load_listener(
-        &mut bpf,
         config.listen_addr,
         config.listen_addr_v6,
         config.container_bridge_listen_addr,
@@ -271,27 +271,16 @@ fn set_proxy_addr(
 }
 
 async fn load_listener(
-    bpf: &mut Bpf,
     listen_addr: SocketAddrV4,
     listen_addr_v6: SocketAddrV6,
     container_bridge_listen_addr: Option<SocketAddrV4>,
     container_bridge_listen_addr_v6: Option<SocketAddrV6>,
 ) -> anyhow::Result<BpfListener> {
-    let ipv4_map_ref_mut = bpf
-        .take_map(IPV4_ADDR_MAP)
-        .expect("IPV4_ADDR_MAP bpf lru map not found");
-
-    let ipv6_map_ref_mut = bpf
-        .take_map(IPV6_ADDR_MAP)
-        .expect("IPV6_ADDR_MAP bpf lru map not found");
-
     BpfListener::new(
         listen_addr,
         listen_addr_v6,
         container_bridge_listen_addr,
         container_bridge_listen_addr_v6,
-        ipv4_map_ref_mut,
-        ipv6_map_ref_mut,
     )
     .await
 }

@@ -6,11 +6,11 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use aya::maps::lpm_trie::{Key, LpmTrie};
+use aya::{Bpf, BpfLoader};
 use aya::maps::Array;
-use aya::programs::cgroup_sock_addr::CgroupSockAddrLink;
+use aya::maps::lpm_trie::{Key, LpmTrie};
 use aya::programs::{CgroupSockAddr, SockOps};
-use aya::Bpf;
+use aya::programs::cgroup_sock_addr::CgroupSockAddrLink;
 use aya_log::BpfLogger;
 use bytes::Bytes;
 use cidr::Ipv6Inet;
@@ -20,13 +20,7 @@ use futures_rustls::TlsAcceptor;
 use futures_util::StreamExt;
 use h2::server;
 use http::{HeaderMap, Response};
-use lycoris_client::bpf_map_name::*;
-use lycoris_client::bpf_share::{Ipv4Addr, Ipv6Addr};
-use lycoris_client::{BpfListener, Client, HyperConnector, OwnedLink};
-use protocol::auth::Auth;
 use rustix::process::getuid;
-use share::helper::Ipv6AddrExt;
-use share::log::init_log;
 use tokio::fs;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
@@ -34,6 +28,13 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::info;
 use tracing_log::LogTracer;
+
+use lycoris_client::{BpfListener, Client, HyperConnector, OwnedLink};
+use lycoris_client::bpf_map_name::*;
+use lycoris_client::bpf_share::{Ipv4Addr, Ipv6Addr};
+use protocol::auth::Auth;
+use share::helper::Ipv6AddrExt;
+use share::log::init_log;
 
 const CGROUP_PATH: &str = "/sys/fs/cgroup";
 const BPF_ELF: &str = "../target/bpfel-unknown-none/release/lycoris-bpf";
@@ -66,7 +67,10 @@ async fn main() {
     let listen_addr = SocketAddrV4::from_str(TEST_LISTEN_ADDR).unwrap();
     let listen_addr_v6 = SocketAddrV6::from_str(TEST_LISTEN_ADDR_V6).unwrap();
 
-    let mut bpf = Bpf::load_file(BPF_ELF).unwrap();
+    let mut bpf = BpfLoader::new()
+        .allow_unsupported_maps()
+        .load_file(BPF_ELF)
+        .unwrap();
 
     init_bpf_log(&mut bpf);
 
@@ -81,7 +85,7 @@ async fn main() {
 
     info!(%h2_server_addr, "start server");
 
-    let listener = load_listener(&mut bpf, listen_addr, listen_addr_v6).await;
+    let listener = load_listener(listen_addr, listen_addr_v6).await;
     let connector = load_connector(
         "localhost".to_string(),
         h2_server_addr.port(),
@@ -197,19 +201,8 @@ async fn load_connector(
     .unwrap()
 }
 
-async fn load_listener(
-    bpf: &mut Bpf,
-    listen_addr: SocketAddrV4,
-    listen_addr_v6: SocketAddrV6,
-) -> BpfListener {
-    let ipv4_map = bpf
-        .take_map(IPV4_ADDR_MAP)
-        .expect("IPV4_ADDR_MAP bpf lru map not found");
-    let ipv6_map = bpf
-        .take_map(IPV6_ADDR_MAP)
-        .expect("IPV6_ADDR_MAP bpf lru map not found");
-
-    BpfListener::new(listen_addr, listen_addr_v6, None, None, ipv4_map, ipv6_map)
+async fn load_listener(listen_addr: SocketAddrV4, listen_addr_v6: SocketAddrV6) -> BpfListener {
+    BpfListener::new(listen_addr, listen_addr_v6, None, None)
         .await
         .unwrap()
 }

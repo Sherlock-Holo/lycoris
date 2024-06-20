@@ -1,6 +1,3 @@
-pub const IPV4_ADDR_MAP: &str = "IPV4_ADDR_MAP";
-pub const IPV6_ADDR_MAP: &str = "IPV6_ADDR_MAP";
-
 pub const PROXY_IPV4_LIST: &str = "PROXY_IPV4_LIST";
 pub const PROXY_IPV6_LIST: &str = "PROXY_IPV6_LIST";
 
