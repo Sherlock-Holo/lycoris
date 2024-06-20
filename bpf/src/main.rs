@@ -8,23 +8,37 @@ use aya_ebpf::programs::{SockAddrContext, SockOpsContext};
 
 #[cgroup_sock_addr(connect4)]
 fn connect4(ctx: SockAddrContext) -> c_int {
-    let _ = lycoris_bpf::handle_cgroup_connect4(ctx);
-
-    1
+    lycoris_bpf::handle_cgroup_connect4(ctx)
+        .map(|_| 1)
+        .unwrap_or_else(|err| err as _)
 }
 
 #[cgroup_sock_addr(connect6)]
 fn connect6(ctx: SockAddrContext) -> c_int {
-    let _ = lycoris_bpf::handle_cgroup_connect6(ctx);
-
-    1
+    lycoris_bpf::handle_cgroup_connect6(ctx)
+        .map(|_| 1)
+        .unwrap_or_else(|err| err as _)
 }
 
 #[sock_ops]
 fn established_connect(ctx: SockOpsContext) -> c_uint {
-    let _ = lycoris_bpf::handle_sockops(ctx);
+    lycoris_bpf::handle_sockops(ctx)
+        .map(|_| 1)
+        .unwrap_or_else(|err| err as _)
+}
 
-    1
+#[cgroup_sock_addr(getsockname4)]
+fn getsockname4(ctx: SockAddrContext) -> c_int {
+    lycoris_bpf::handle_getsockname(ctx)
+        .map(|_| 1)
+        .unwrap_or_else(|err| err as _)
+}
+
+#[cgroup_sock_addr(getsockname6)]
+fn getsockname6(ctx: SockAddrContext) -> c_int {
+    lycoris_bpf::handle_getsockname(ctx)
+        .map(|_| 1)
+        .unwrap_or_else(|err| err as _)
 }
 
 #[panic_handler]

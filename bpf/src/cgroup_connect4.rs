@@ -1,10 +1,12 @@
 use core::ffi::c_long;
 use core::ptr;
+use core::ptr::addr_of_mut;
 
+use aya_ebpf::bindings::BPF_LOCAL_STORAGE_GET_F_CREATE;
 use aya_ebpf::helpers::*;
 use aya_ebpf::maps::lpm_trie::Key;
 use aya_ebpf::programs::SockAddrContext;
-use aya_log_ebpf::debug;
+use aya_log_ebpf::{debug, error};
 
 use crate::command_check::command_can_connect_directly;
 use crate::kernel_binding::require;
@@ -91,16 +93,30 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
         u32::from_be_bytes(proxy_client.addr)
     );
 
-    let cookie = unsafe { bpf_get_socket_cookie(ctx.sock_addr as _) };
     let origin_dst_ipv4_addr = Ipv4Addr {
         addr: user_ip4,
         port: u16::from_be(sock_addr.user_port as _),
         _padding: [0; 2],
     };
 
-    DST_IPV4_ADDR_STORE.insert(&cookie, &origin_dst_ipv4_addr, 0)?;
+    unsafe {
+        let ptr = bpf_sk_storage_get(
+            addr_of_mut!(CONNECT_DST_IPV4_ADDR_STORAGE) as _,
+            (*ctx.sock_addr).__bindgen_anon_1.sk as _,
+            ptr::null_mut(),
+            BPF_LOCAL_STORAGE_GET_F_CREATE as _,
+        );
+        if ptr.is_null() {
+            error!(&ctx, "get sk_storage ptr failed");
 
-    debug!(&ctx, "set cookie and origin dst ipv4 addr done");
+            return Err(0);
+        }
+
+        let ptr = ptr as *mut Ipv4Addr;
+        ptr.write(origin_dst_ipv4_addr);
+
+        debug!(&ctx, "write sk_storage ptr done");
+    }
 
     sock_addr.user_ip4 = u32::from_be_bytes(proxy_client.addr).to_be();
     sock_addr.user_port = proxy_client.port.to_be() as _;
