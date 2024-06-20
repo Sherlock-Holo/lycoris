@@ -4,7 +4,7 @@ use core::mem;
 
 pub use cgroup_connect4::handle_cgroup_connect4;
 pub use cgroup_connect6::handle_cgroup_connect6;
-pub use getsockname::handle_getsockname;
+pub use getsockname::{handle_getsockname4, handle_getsockname6};
 pub use sockops_callback::handle_sockops;
 
 mod cgroup_connect4;

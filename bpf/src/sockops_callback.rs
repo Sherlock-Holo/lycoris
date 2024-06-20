@@ -299,11 +299,12 @@ fn handle_passive_established_ipv6(ctx: SockOpsContext) -> Result<(), c_long> {
 
         let ptr = ptr as *mut Ipv6Addr;
         let addr: [u8; 16] = (&buf[2..18]).try_into().unwrap();
+        let addr = mem::transmute::<[u8; 16], [u16; 8]>(addr);
 
-        ptr.write(Ipv6Addr {
-            addr: mem::transmute::<[u8; 16], [u16; 8]>(addr),
-            port: u16::from_be_bytes((&buf[18..20]).try_into().unwrap()),
-        });
+        // must set port at first, otherwise will fail on ebpf verifier with
+        // R5 bitwise operator &= on pointer prohibited
+        (*ptr).port = u16::from_be_bytes((&buf[18..20]).try_into().unwrap());
+        (*ptr).addr.copy_from_slice(&addr);
 
         debug!(&ctx, "bpf sk storage write origin dst ipv6 done");
     }

@@ -10,33 +10,33 @@ use aya_ebpf::programs::{SockAddrContext, SockOpsContext};
 fn connect4(ctx: SockAddrContext) -> c_int {
     lycoris_bpf::handle_cgroup_connect4(ctx)
         .map(|_| 1)
-        .unwrap_or_else(|err| err as _)
+        .unwrap_or_else(|err| 0)
 }
 
 #[cgroup_sock_addr(connect6)]
 fn connect6(ctx: SockAddrContext) -> c_int {
     lycoris_bpf::handle_cgroup_connect6(ctx)
         .map(|_| 1)
-        .unwrap_or_else(|err| err as _)
+        .unwrap_or_else(|err| 0)
 }
 
 #[sock_ops]
 fn established_connect(ctx: SockOpsContext) -> c_uint {
     lycoris_bpf::handle_sockops(ctx)
         .map(|_| 1)
-        .unwrap_or_else(|err| err as _)
+        .unwrap_or_else(|err| 0)
 }
 
 #[cgroup_sock_addr(getsockname4)]
 fn getsockname4(ctx: SockAddrContext) -> c_int {
-    lycoris_bpf::handle_getsockname(ctx)
+    lycoris_bpf::handle_getsockname4(ctx)
         .map(|_| 1)
         .unwrap_or_else(|err| err as _)
 }
 
 #[cgroup_sock_addr(getsockname6)]
 fn getsockname6(ctx: SockAddrContext) -> c_int {
-    lycoris_bpf::handle_getsockname(ctx)
+    lycoris_bpf::handle_getsockname6(ctx)
         .map(|_| 1)
         .unwrap_or_else(|err| err as _)
 }
