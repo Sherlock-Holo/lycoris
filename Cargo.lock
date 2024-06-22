@@ -1194,7 +1194,7 @@ dependencies = [
 
 [[package]]
 name = "lycoris-bpf"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "aya-ebpf",
  "aya-log-ebpf",
@@ -1204,7 +1204,7 @@ dependencies = [
 
 [[package]]
 name = "lycoris-client"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "aya",
@@ -1515,7 +1515,7 @@ dependencies = [
 
 [[package]]
 name = "protocol"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bytes",
  "futures-channel",

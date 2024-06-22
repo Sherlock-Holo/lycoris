@@ -1,7 +1,0 @@
-organization = "test"
-cn = "localhost"
-dns_name = "localhost"
-tls_www_server
-encryption_key
-signing_key
-expiration_days = 3650
