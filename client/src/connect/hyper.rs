@@ -1,6 +1,7 @@
 use std::io;
 use std::net::SocketAddr;
 
+use futures_util::Stream;
 use hyper_util::rt::{TokioExecutor, TokioTimer};
 use protocol::auth::Auth;
 use protocol::connect::TcpConnector;
@@ -18,8 +19,11 @@ struct TokioConnector;
 impl TcpConnector for TokioConnector {
     type ConnectedTcpStream = TokioTcp;
 
-    async fn connect(&mut self, addr: SocketAddr) -> io::Result<Self::ConnectedTcpStream> {
-        let tcp_stream = TcpStream::connect_mptcp([addr]).await?;
+    async fn connect<S: Stream<Item = io::Result<SocketAddr>> + Send>(
+        &mut self,
+        addrs: S,
+    ) -> io::Result<Self::ConnectedTcpStream> {
+        let tcp_stream = TcpStream::connect_mptcp(addrs).await?;
 
         Ok(TokioTcp::from(tcp_stream))
     }
