@@ -20,15 +20,19 @@ there are 3 parts about lycoris
 
 ### lycoris-bpf
 
-`lycoris-bpf` will hook all socket connect, and check if the dst ip should be proxies or not,
-if it is a need proxy ip, lycoris-bpf will change the socket dst ip to `lycoris-client`, and save the real dst ip and
-port in bpf lru map, so `lycoris-client` can get it and send the dst ip and port to `lycoris-server` to connect the
+`lycoris-bpf` will hook all socket connect, and check if the dst ip should be proxies or not, if it is a need proxy ip,
+lycoris-bpf will change the socket dst ip to `lycoris-client`, and save the real dst ip and port in bpf socket
+`sk_storage`, then hook `lycoris-client` `TcpListener` `getsockname` to allow `lycoris-client` get the real dst ip and
+port, so `lycoris-client` can get it and send the dst ip and port to `lycoris-server` to connect the
 target
+
+also `lycoris-bpf>4.0` now will also hook `getpeername` for the connecting socket so it will get the real dst ip and
+port too
 
 ### lycoris-client
 
-`lycoris-client` will listen a tcp socket, when a new tcp accepted, it will try to get the real dst ip and port from
-bpf lru map, and send to `lycoris-server`
+`lycoris-client` will listen a tcp socket, when a new tcp accepted, it will get the real dst ip and port through hooked
+`getsockname`, and send to `lycoris-server`
 
 ### lycoris-server
 
@@ -51,9 +55,9 @@ it just a simple txt like
 ## features
 
 - [x] TCP4 proxy
-- [ ] UDP4 proxy
+- [ ] UDP4 proxy(needs good idea)
 - [x] TCP6 proxy
-- [ ] UDP6 proxy
+- [ ] UDP6 proxy(needs good idea)
 - [x] ip list filter
 - [x] container proxy
   - need set `container_bridge_listen_addr` and `container_bridge_listen_addr_v6`
