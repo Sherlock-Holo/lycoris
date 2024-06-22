@@ -66,6 +66,7 @@ async fn main() {
 
     let _connect6_link = load_connect6(&mut bpf, Path::new(CGROUP_PATH)).await;
     let _getsockname_link = load_getsockname6(&mut bpf, Path::new(CGROUP_PATH)).await;
+    let _getpeername6 = load_getpeername6(&mut bpf, Path::new(CGROUP_PATH)).await;
     let _sockops_link = load_established_sockops(&mut bpf, Path::new(CGROUP_PATH)).await;
 
     let mut listener = load_listener(listen_addr, listen_addr_v6).await;
@@ -127,6 +128,26 @@ async fn load_getsockname6(bpf: &mut Bpf, cgroup_path: &Path) -> OwnedLink<Cgrou
     prog.load().unwrap();
 
     info!("load getsockname6 done");
+
+    let link_id = prog.attach(cgroup_file).unwrap();
+
+    info!(?cgroup_path, "attach cgroup done");
+
+    prog.take_link(link_id).unwrap().into()
+}
+
+async fn load_getpeername6(bpf: &mut Bpf, cgroup_path: &Path) -> OwnedLink<CgroupSockAddrLink> {
+    let cgroup_file = File::open(cgroup_path).await.unwrap();
+
+    let prog: &mut CgroupSockAddr = bpf
+        .program_mut("getpeername6")
+        .expect("bpf getpeername6 not found")
+        .try_into()
+        .unwrap();
+
+    prog.load().unwrap();
+
+    info!("load getpeername6 done");
 
     let link_id = prog.attach(cgroup_file).unwrap();
 

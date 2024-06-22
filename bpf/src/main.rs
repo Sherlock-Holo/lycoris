@@ -29,14 +29,28 @@ fn established_connect(ctx: SockOpsContext) -> c_uint {
 
 #[cgroup_sock_addr(getsockname4)]
 fn getsockname4(ctx: SockAddrContext) -> c_int {
-    lycoris_bpf::get_sock_name4(ctx)
+    lycoris_bpf::getsockname4(ctx)
         .map(|_| 1)
         .unwrap_or_else(|err| err as _)
 }
 
 #[cgroup_sock_addr(getsockname6)]
 fn getsockname6(ctx: SockAddrContext) -> c_int {
-    lycoris_bpf::get_sock_name6(ctx)
+    lycoris_bpf::getsockname6(ctx)
+        .map(|_| 1)
+        .unwrap_or_else(|err| err as _)
+}
+
+#[cgroup_sock_addr(getpeername4)]
+fn getpeername4(ctx: SockAddrContext) -> c_int {
+    lycoris_bpf::getpeername4(ctx)
+        .map(|_| 1)
+        .unwrap_or_else(|err| err as _)
+}
+
+#[cgroup_sock_addr(getpeername6)]
+fn getpeername6(ctx: SockAddrContext) -> c_int {
+    lycoris_bpf::getpeername6(ctx)
         .map(|_| 1)
         .unwrap_or_else(|err| err as _)
 }

@@ -4,12 +4,14 @@ use core::mem;
 
 pub use cgroup_connect4::handle_cgroup_connect4;
 pub use cgroup_connect6::handle_cgroup_connect6;
-pub use get_sock_name::{get_sock_name4, get_sock_name6};
+pub use get_peer_name::{getpeername4, getpeername6};
+pub use get_sock_name::{getsockname4, getsockname6};
 pub use sockops_callback::handle_sockops;
 
 mod cgroup_connect4;
 mod cgroup_connect6;
 mod command_check;
+mod get_peer_name;
 mod get_sock_name;
 mod kernel_binding;
 mod map;
