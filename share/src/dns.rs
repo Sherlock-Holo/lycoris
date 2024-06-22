@@ -1,6 +1,7 @@
 use std::io;
 use std::net::IpAddr;
 
+use futures_util::{stream, Stream, StreamExt};
 use hickory_resolver::name_server::{GenericConnector, TokioRuntimeProvider};
 use hickory_resolver::AsyncResolver;
 use protocol::DnsResolver;
@@ -19,9 +20,12 @@ impl HickoryDnsResolver {
 }
 
 impl DnsResolver for HickoryDnsResolver {
-    async fn resolve(&mut self, name: &str) -> io::Result<impl IntoIterator<Item = IpAddr>> {
+    async fn resolve(
+        &mut self,
+        name: &str,
+    ) -> io::Result<impl Stream<Item = io::Result<IpAddr>> + Send> {
         let lookup_ip = self.resolver.lookup_ip(name).await?;
 
-        Ok(lookup_ip)
+        Ok(stream::iter(lookup_ip).map(Ok))
     }
 }
