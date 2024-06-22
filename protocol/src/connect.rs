@@ -117,7 +117,7 @@ impl<DR: DnsResolver + Sync + 'static, TC: TcpConnector + Sync + 'static> HyperC
         remote_addr: DomainOrSocketAddr,
     ) -> Result<(Reader, Writer), Error> {
         let token = self.inner.token_generator.generate_token();
-        let remote_addr_data = super::encode_addr(remote_addr);
+        let remote_addr_data = remote_addr.encode();
 
         let (req_body_tx, req_body_rx) = mpsc::unbounded();
         req_body_tx

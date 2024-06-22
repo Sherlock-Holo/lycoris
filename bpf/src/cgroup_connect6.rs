@@ -1,11 +1,12 @@
 use core::ffi::c_long;
-use core::{mem, ptr};
+use core::ptr::addr_of_mut;
+use core::{mem, net, ptr};
 
-use aya_ebpf::bindings::bpf_sock_addr;
+use aya_ebpf::bindings::{bpf_sock_addr, BPF_LOCAL_STORAGE_GET_F_CREATE};
 use aya_ebpf::helpers::*;
 use aya_ebpf::maps::lpm_trie::Key;
 use aya_ebpf::programs::SockAddrContext;
-use aya_log_ebpf::debug;
+use aya_log_ebpf::{debug, error, info};
 
 use crate::command_check::command_can_connect_directly;
 use crate::kernel_binding::require;
@@ -36,23 +37,60 @@ pub fn handle_cgroup_connect6(ctx: SockAddrContext) -> Result<(), c_long> {
 
     let user_ipv6 = get_ipv6_segments(sock_addr);
     let user_ipv6_octets = u16_ipv6_to_u8_ipv6(user_ipv6);
-    let key = Key::new(128, user_ipv6);
+    match net::Ipv6Addr::from(user_ipv6_octets).to_ipv4_mapped() {
+        Some(ipv4) => {
+            let ipv4_octets = ipv4.octets();
+            info!(
+                &ctx,
+                "ipv6 addr {:i} is ipv4 mapped addr {:i}",
+                user_ipv6_octets,
+                u32::from_be_bytes(ipv4_octets),
+            );
 
-    let in_list_connect_directly = match PROXY_LIST_MODE.get(0) {
-        None => {
-            debug!(&ctx, "get proxy list mode failed");
+            let key = Key::new(32, ipv4_octets);
 
-            return Err(0);
+            let in_list_connect_directly = match PROXY_LIST_MODE.get(0) {
+                None => {
+                    debug!(&ctx, "get proxy list mode failed");
+
+                    return Err(0);
+                }
+
+                Some(mode) => *mode == CONNECT_DIRECTLY_MODE,
+            };
+
+            let in_list = PROXY_IPV4_LIST.get(&key).copied().unwrap_or(0) > 0;
+            if connect_directly(in_list_connect_directly, in_list) {
+                debug!(
+                    &ctx,
+                    "{:i} is direct connect ip",
+                    u32::from_be_bytes(ipv4_octets)
+                );
+
+                return Ok(());
+            }
         }
 
-        Some(mode) => *mode == CONNECT_DIRECTLY_MODE,
-    };
+        None => {
+            let key = Key::new(128, user_ipv6);
 
-    let in_list = PROXY_IPV6_LIST.get(&key).copied().unwrap_or(0) > 0;
-    if connect_directly(in_list_connect_directly, in_list) {
-        debug!(&ctx, "{:i} is direct connect ip", user_ipv6_octets);
+            let in_list_connect_directly = match PROXY_LIST_MODE.get(0) {
+                None => {
+                    debug!(&ctx, "get proxy list mode failed");
 
-        return Ok(());
+                    return Err(0);
+                }
+
+                Some(mode) => *mode == CONNECT_DIRECTLY_MODE,
+            };
+
+            let in_list = PROXY_IPV6_LIST.get(&key).copied().unwrap_or(0) > 0;
+            if connect_directly(in_list_connect_directly, in_list) {
+                debug!(&ctx, "{:i} is direct connect ip", user_ipv6_octets);
+
+                return Ok(());
+            }
+        }
     }
 
     let index = if in_container { 1 } else { 0 };
@@ -69,13 +107,13 @@ pub fn handle_cgroup_connect6(ctx: SockAddrContext) -> Result<(), c_long> {
         Some(proxy_server) => proxy_server,
     };
 
-    if in_container && proxy_client.addr == [0; 8] {
+    if in_container && proxy_client.addr == [0; 16] {
         debug!(&ctx, "container bridge listen addr v6 not set, ignore it");
 
         return Ok(());
     }
 
-    if user_ipv6 == proxy_client.addr {
+    if user_ipv6_octets == proxy_client.addr {
         debug!(
             &ctx,
             "proxy client ip {:i} need connect directly", user_ipv6_octets
@@ -88,20 +126,32 @@ pub fn handle_cgroup_connect6(ctx: SockAddrContext) -> Result<(), c_long> {
 
     debug!(
         &ctx,
-        "get proxy server done [{:i}]:{}",
-        u16_ipv6_to_u8_ipv6(proxy_client.addr),
-        proxy_client.port
+        "get proxy server done [{:i}]:{}", proxy_client.addr, proxy_client.port
     );
 
-    let cookie = unsafe { bpf_get_socket_cookie(ctx.sock_addr as _) };
     let origin_dst_ipv6_addr = Ipv6Addr {
-        addr: user_ipv6,
+        addr: user_ipv6_octets,
         port: u16::from_be(sock_addr.user_port as _),
     };
 
-    DST_IPV6_ADDR_STORE.insert(&cookie, &origin_dst_ipv6_addr, 0)?;
+    unsafe {
+        let ptr = bpf_sk_storage_get(
+            addr_of_mut!(CONNECT_DST_IPV6_ADDR_STORAGE) as _,
+            (*ctx.sock_addr).__bindgen_anon_1.sk as _,
+            ptr::null_mut(),
+            BPF_LOCAL_STORAGE_GET_F_CREATE as _,
+        );
+        if ptr.is_null() {
+            error!(&ctx, "get sk_storage ptr failed");
 
-    debug!(&ctx, "set cookie and origin dst ipv6 addr done");
+            return Err(0);
+        }
+
+        let ptr = ptr as *mut Ipv6Addr;
+        ptr.write(origin_dst_ipv6_addr);
+
+        debug!(&ctx, "write sk_storage ptr done");
+    }
 
     set_ipv6_segments(sock_addr, proxy_client.addr);
     sock_addr.user_port = proxy_client.port.to_be() as _;
@@ -125,7 +175,7 @@ fn get_ipv6_segments(sock_addr: &bpf_sock_addr) -> [u16; 8] {
 }
 
 #[inline]
-fn set_ipv6_segments(sock_addr: &mut bpf_sock_addr, value: [u16; 8]) {
+fn set_ipv6_segments(sock_addr: &mut bpf_sock_addr, value: [u8; 16]) {
     let value: [u32; 4] = unsafe { mem::transmute(value) };
 
     sock_addr.user_ip6[0] = value[0];

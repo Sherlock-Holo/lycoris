@@ -1,6 +1,6 @@
 use std::convert::Infallible;
-use std::io::IoSlice;
-use std::net::{IpAddr, SocketAddr};
+use std::io::{ErrorKind, IoSlice};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::pin::Pin;
 use std::task::{ready, Context, Poll};
 use std::{io, slice};
@@ -9,7 +9,7 @@ pub use accept::{HyperAcceptor, HyperListener};
 use bytes::{BufMut, Bytes, BytesMut};
 pub use connect::{HyperConnector, HyperConnectorConfig};
 use futures_rustls::TlsStream;
-use futures_util::{AsyncRead, AsyncWrite};
+use futures_util::{AsyncRead, AsyncReadExt, AsyncWrite};
 use hyper::rt::ReadBufCursor;
 use hyper_util::client::legacy::connect::{Connected, Connection};
 use tokio::io::{AsyncRead as TAsyncRead, AsyncWrite as TAsyncWrite, ReadBuf};
@@ -130,46 +130,106 @@ pub enum DomainOrSocketAddr {
     SocketAddr(SocketAddr),
 }
 
-impl From<SocketAddr> for DomainOrSocketAddr {
-    fn from(value: SocketAddr) -> Self {
-        Self::SocketAddr(value)
+impl DomainOrSocketAddr {
+    const DOMAIN_TYPE: u8 = 1;
+    const SOCKET_ADDR4_TYPE: u8 = 4;
+    const SOCKET_ADDR6_TYPE: u8 = 6;
+
+    /// Encode addr to \[addr_type:1, addr:variant, port:2\]
+    pub fn encode(self) -> Bytes {
+        match self {
+            DomainOrSocketAddr::Domain { domain, port } => {
+                let mut buf = BytesMut::with_capacity(1 + 2 + domain.as_bytes().len() + 2);
+
+                buf.put_u8(1);
+                buf.put_u16(domain.as_bytes().len() as _);
+                buf.put(domain.as_bytes());
+                buf.put_u16(port);
+
+                buf.freeze()
+            }
+            DomainOrSocketAddr::SocketAddr(addr) => match addr {
+                SocketAddr::V4(v4_addr) => {
+                    let mut buf = BytesMut::with_capacity(1 + 4 + 2);
+
+                    buf.put_u8(4);
+                    buf.put(v4_addr.ip().octets().as_slice());
+                    buf.put_u16(v4_addr.port());
+
+                    buf.freeze()
+                }
+
+                SocketAddr::V6(v6_addr) => {
+                    let mut buf = BytesMut::with_capacity(1 + 16 + 2);
+
+                    buf.put_u8(6);
+                    buf.put(v6_addr.ip().octets().as_slice());
+                    buf.put_u16(v6_addr.port());
+
+                    buf.freeze()
+                }
+            },
+        }
+    }
+
+    pub async fn parse<T: AsyncRead + Unpin>(reader: &mut T) -> io::Result<Self> {
+        let mut r#type = [0];
+        reader.read_exact(&mut r#type).await?;
+
+        let ip = match r#type[0] {
+            Self::DOMAIN_TYPE => {
+                let mut domain_len = [0; 2];
+                reader.read_exact(&mut domain_len).await?;
+
+                let mut domain = vec![0; u16::from_be_bytes(domain_len) as _];
+                reader.read_exact(&mut domain).await?;
+                let domain = String::from_utf8(domain)
+                    .map_err(|err| io::Error::new(ErrorKind::Other, err))?;
+
+                let mut port = [0; 2];
+                reader.read_exact(&mut port).await?;
+
+                return Ok(Self::Domain {
+                    domain,
+                    port: u16::from_be_bytes(port),
+                });
+            }
+
+            Self::SOCKET_ADDR4_TYPE => {
+                let mut addr = [0; 4];
+                reader.read_exact(&mut addr).await?;
+
+                IpAddr::from(Ipv4Addr::from(addr))
+            }
+
+            Self::SOCKET_ADDR6_TYPE => {
+                let mut addr = [0; 16];
+                reader.read_exact(&mut addr).await?;
+
+                IpAddr::from(Ipv6Addr::from(addr))
+            }
+
+            _ => {
+                return Err(io::Error::new(
+                    ErrorKind::Other,
+                    format!("unknown type {}", r#type[0]),
+                ))
+            }
+        };
+
+        let mut port = [0; 2];
+        reader.read_exact(&mut port).await?;
+
+        Ok(Self::SocketAddr(SocketAddr::new(
+            ip,
+            u16::from_be_bytes(port),
+        )))
     }
 }
 
-/// Encode addr to \[addr_type:1, addr:variant, port:2\]
-fn encode_addr(addr: impl Into<DomainOrSocketAddr>) -> Bytes {
-    match addr.into() {
-        DomainOrSocketAddr::Domain { domain, port } => {
-            let mut buf = BytesMut::with_capacity(1 + 2 + domain.as_bytes().len() + 2);
-
-            buf.put_u8(1);
-            buf.put_u16(domain.as_bytes().len() as _);
-            buf.put(domain.as_bytes());
-            buf.put_u16(port);
-
-            buf.freeze()
-        }
-        DomainOrSocketAddr::SocketAddr(addr) => match addr {
-            SocketAddr::V4(v4_addr) => {
-                let mut buf = BytesMut::with_capacity(1 + 4 + 2);
-
-                buf.put_u8(4);
-                buf.put(v4_addr.ip().octets().as_slice());
-                buf.put_u16(v4_addr.port());
-
-                buf.freeze()
-            }
-
-            SocketAddr::V6(v6_addr) => {
-                let mut buf = BytesMut::with_capacity(1 + 16 + 2);
-
-                buf.put_u8(6);
-                buf.put(v6_addr.ip().octets().as_slice());
-                buf.put_u16(v6_addr.port());
-
-                buf.freeze()
-            }
-        },
+impl From<SocketAddr> for DomainOrSocketAddr {
+    fn from(value: SocketAddr) -> Self {
+        Self::SocketAddr(value)
     }
 }
 
@@ -233,7 +293,8 @@ mod tests {
 
     #[test]
     fn encode_v4() {
-        let data = encode_addr(SocketAddr::from_str("127.0.0.1:80").unwrap());
+        let data =
+            DomainOrSocketAddr::SocketAddr(SocketAddr::from_str("127.0.0.1:80").unwrap()).encode();
 
         let mut correct = BytesMut::from(&[4, 127, 0, 0, 1][..]);
         correct.put_u16(80);
@@ -243,7 +304,8 @@ mod tests {
 
     #[test]
     fn encode_v6() {
-        let data = encode_addr(SocketAddr::from_str("[::1]:80").unwrap());
+        let data =
+            DomainOrSocketAddr::SocketAddr(SocketAddr::from_str("[::1]:80").unwrap()).encode();
 
         let mut correct = BytesMut::from(&[6][..]);
         correct.put(Ipv6Addr::from_str("::1").unwrap().octets().as_slice());
@@ -254,10 +316,11 @@ mod tests {
 
     #[test]
     fn encode_domain() {
-        let data = encode_addr(DomainOrSocketAddr::Domain {
+        let data = DomainOrSocketAddr::Domain {
             domain: "www.example.com".to_string(),
             port: 80,
-        });
+        }
+        .encode();
 
         let mut correct = BytesMut::from(&[1][..]);
         correct.put_u16("www.example.com".as_bytes().len() as _);

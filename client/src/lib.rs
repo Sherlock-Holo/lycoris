@@ -9,7 +9,7 @@ use aya::maps::lpm_trie::{Key, LpmTrie};
 use aya::maps::Array;
 use aya::programs::cgroup_sock_addr::CgroupSockAddrLink;
 use aya::programs::{CgroupSockAddr, Link, SockOps};
-use aya::{maps, Bpf};
+use aya::{maps, Bpf, BpfLoader};
 use aya_log::BpfLogger;
 use cidr::{Ipv4Inet, Ipv6Inet};
 use clap::Parser;
@@ -18,7 +18,6 @@ use futures_util::{future, StreamExt};
 use hickory_resolver::error::ResolveErrorKind;
 use hickory_resolver::AsyncResolver;
 use protocol::auth::Auth;
-use share::helper::Ipv6AddrExt;
 use share::log::init_log;
 use tokio::fs::{self, File};
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -33,10 +32,12 @@ pub use crate::client::Client;
 use crate::config::Config;
 #[doc(hidden)]
 pub use crate::connect::hyper::HyperConnector;
+#[doc(hidden)]
 pub use crate::listener::bpf::BpfListener;
+#[doc(hidden)]
+pub use crate::listener::Listener;
 pub use crate::owned_link::OwnedLink;
 
-mod addr;
 mod args;
 pub mod bpf_map_name;
 pub mod bpf_share;
@@ -66,7 +67,10 @@ async fn run_bpf(args: Args, config: Config) -> anyhow::Result<()> {
 
     info!(?remote_domain_ips, "get remote domain ip done");
 
-    let mut bpf = Bpf::load_file(&args.bpf_elf)?;
+    let mut bpf = BpfLoader::new()
+        // allow bpf elf contains sk_storage bpf map
+        .allow_unsupported_maps()
+        .load_file(&args.bpf_elf)?;
 
     info!("load bpf done");
 
@@ -108,12 +112,14 @@ async fn run_bpf(args: Args, config: Config) -> anyhow::Result<()> {
 
     let _connect6_link = load_connect6(&mut bpf, &config.cgroup_path).await?;
 
-    let _sockops_link = load_established_sockops(&mut bpf, &config.cgroup_path).await?;
+    let _getsockname4 = load_getsockname4(&mut bpf, &config.cgroup_path).await?;
+    let _getsockname6 = load_getsockname6(&mut bpf, &config.cgroup_path).await?;
+
+    let _sockops_link = load_sockops(&mut bpf, &config.cgroup_path).await?;
 
     info!("load sockops done");
 
     let bpf_listener = load_listener(
-        &mut bpf,
         config.listen_addr,
         config.listen_addr_v6,
         config.container_bridge_listen_addr,
@@ -183,11 +189,52 @@ async fn load_connect6(
     Ok(connect6_prog.take_link(connect6_link_id)?.into())
 }
 
-// return OwnedLink<impl Link> because the SockOpsLink is un-exported
-async fn load_established_sockops(
+async fn load_getsockname4(
     bpf: &mut Bpf,
     cgroup_path: &Path,
-) -> anyhow::Result<OwnedLink<impl Link>> {
+) -> anyhow::Result<OwnedLink<CgroupSockAddrLink>> {
+    let cgroup_file = File::open(cgroup_path).await?;
+
+    let prog: &mut CgroupSockAddr = bpf
+        .program_mut("getsockname4")
+        .expect("bpf getsockname4 not found")
+        .try_into()?;
+
+    prog.load()?;
+
+    info!("load getsockname4 done");
+
+    let link_id = prog.attach(cgroup_file)?;
+
+    info!(?cgroup_path, "attach cgroup done");
+
+    Ok(prog.take_link(link_id)?.into())
+}
+
+async fn load_getsockname6(
+    bpf: &mut Bpf,
+    cgroup_path: &Path,
+) -> anyhow::Result<OwnedLink<CgroupSockAddrLink>> {
+    let cgroup_file = File::open(cgroup_path).await?;
+
+    let prog: &mut CgroupSockAddr = bpf
+        .program_mut("getsockname6")
+        .expect("bpf getsockname4 not found")
+        .try_into()?;
+
+    prog.load()?;
+
+    info!("load getsockname6 done");
+
+    let link_id = prog.attach(cgroup_file)?;
+
+    info!(?cgroup_path, "attach cgroup done");
+
+    Ok(prog.take_link(link_id)?.into())
+}
+
+// return OwnedLink<impl Link> because the SockOpsLink is un-exported
+async fn load_sockops(bpf: &mut Bpf, cgroup_path: &Path) -> anyhow::Result<OwnedLink<impl Link>> {
     let cgroup_file = File::open(cgroup_path).await?;
 
     let prog: &mut SockOps = bpf
@@ -252,7 +299,7 @@ fn set_proxy_addr(
     }
 
     let proxy_addr = ShareIpv6Addr {
-        addr: addr_v6.ip().network_order_segments(),
+        addr: addr_v6.ip().to_bits().to_be_bytes(),
         port: addr_v6.port(),
     };
 
@@ -260,7 +307,7 @@ fn set_proxy_addr(
 
     if let Some(addr_v6) = container_bridge_listen_addr_v6 {
         let proxy_addr = ShareIpv6Addr {
-            addr: addr_v6.ip().network_order_segments(),
+            addr: addr_v6.ip().to_bits().to_be_bytes(),
             port: addr_v6.port(),
         };
 
@@ -271,27 +318,16 @@ fn set_proxy_addr(
 }
 
 async fn load_listener(
-    bpf: &mut Bpf,
     listen_addr: SocketAddrV4,
     listen_addr_v6: SocketAddrV6,
     container_bridge_listen_addr: Option<SocketAddrV4>,
     container_bridge_listen_addr_v6: Option<SocketAddrV6>,
 ) -> anyhow::Result<BpfListener> {
-    let ipv4_map_ref_mut = bpf
-        .take_map(IPV4_ADDR_MAP)
-        .expect("IPV4_ADDR_MAP bpf lru map not found");
-
-    let ipv6_map_ref_mut = bpf
-        .take_map(IPV6_ADDR_MAP)
-        .expect("IPV6_ADDR_MAP bpf lru map not found");
-
     BpfListener::new(
         listen_addr,
         listen_addr_v6,
         container_bridge_listen_addr,
         container_bridge_listen_addr_v6,
-        ipv4_map_ref_mut,
-        ipv6_map_ref_mut,
     )
     .await
 }
@@ -360,7 +396,7 @@ async fn set_proxy_ip_list<'a, I: Iterator<Item = &'a Path>>(
                     }
 
                     Ok(ipv6_net) => {
-                        let mut proxy_ipv6_list: LpmTrie<_, [u16; 8], u8> = bpf
+                        let mut proxy_ipv6_list: LpmTrie<_, [u8; 16], u8> = bpf
                             .map_mut(PROXY_IPV6_LIST)
                             .expect("PROXY_IPV6_LIST not found")
                             .try_into()?;
@@ -368,7 +404,7 @@ async fn set_proxy_ip_list<'a, I: Iterator<Item = &'a Path>>(
                         proxy_ipv6_list.insert(
                             &Key::new(
                                 ipv6_net.network_length() as _,
-                                ipv6_net.first_address().network_order_segments(),
+                                ipv6_net.first_address().to_bits().to_be_bytes(),
                             ),
                             1,
                             0,
