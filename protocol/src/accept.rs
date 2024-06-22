@@ -388,9 +388,9 @@ async fn parse_addr<D: DnsResolver>(
             let port = data.get_u16();
 
             addrs
-                .into_iter()
-                .map(|ip| SocketAddr::new(ip, port))
-                .collect()
+                .map_ok(|ip| SocketAddr::new(ip, port))
+                .try_collect()
+                .await?
         }
 
         4 => {

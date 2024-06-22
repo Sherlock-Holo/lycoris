@@ -12,8 +12,7 @@ use futures_rustls::pki_types::{DnsName, ServerName};
 pub use futures_rustls::rustls::ClientConfig;
 use futures_rustls::TlsConnector;
 use futures_util::future::BoxFuture;
-use futures_util::stream::FuturesUnordered;
-use futures_util::{AsyncRead, AsyncWrite, StreamExt};
+use futures_util::{stream, AsyncRead, AsyncWrite, Stream, TryStreamExt};
 use http::{Request, StatusCode, Uri, Version};
 use http_body_util::combinators::BoxBody;
 use http_body_util::StreamBody;
@@ -155,7 +154,10 @@ impl<DR: DnsResolver + Sync + 'static, TC: TcpConnector + Sync + 'static> HyperC
 pub trait TcpConnector: Clone {
     type ConnectedTcpStream: AsyncRead + AsyncWrite + Connection + Send + Sync + Unpin + 'static;
 
-    async fn connect(&mut self, addr: SocketAddr) -> io::Result<Self::ConnectedTcpStream>;
+    async fn connect<S: Stream<Item = io::Result<SocketAddr>> + Send>(
+        &mut self,
+        addrs: S,
+    ) -> io::Result<Self::ConnectedTcpStream>;
 }
 
 #[derive(Clone)]
@@ -195,7 +197,7 @@ impl<TC: TcpConnector + Sync + 'static, DR: DnsResolver + 'static> Service<Uri>
             let tcp_stream = match &server_name {
                 &ServerName::IpAddress(ip) => {
                     this.tcp_connector
-                        .connect(SocketAddr::new(ip.into(), port))
+                        .connect(stream::iter([Ok(SocketAddr::new(ip.into(), port))]))
                         .await?
                 }
 
@@ -225,28 +227,9 @@ impl<TC: TcpConnector, DR: DnsResolver> GenericHttpsConnector<TC, DR> {
         port: u16,
     ) -> io::Result<TC::ConnectedTcpStream> {
         let ip = self.dns_resolver.resolve(dns_name.as_ref()).await?;
-        let mut futs = FuturesUnordered::new();
-        for ip in ip.into_iter() {
-            let mut tcp_connector = self.tcp_connector.clone();
-            futs.push(async move { tcp_connector.connect(SocketAddr::new(ip, port)).await });
-        }
 
-        assert!(
-            !futs.is_empty(),
-            "dns name {dns_name:?} resolve ip list empty"
-        );
-
-        let mut last_err = None;
-        while let Some(res) = futs.next().await {
-            match res {
-                Err(err) => {
-                    last_err = Some(err);
-                }
-
-                Ok(tcp_stream) => return Ok(tcp_stream),
-            }
-        }
-
-        Err(last_err.unwrap())
+        self.tcp_connector
+            .connect(ip.map_ok(|ip| SocketAddr::new(ip, port)))
+            .await
     }
 }

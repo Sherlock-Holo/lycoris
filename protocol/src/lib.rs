@@ -9,7 +9,7 @@ pub use accept::{HyperAcceptor, HyperListener};
 use bytes::{BufMut, Bytes, BytesMut};
 pub use connect::{HyperConnector, HyperConnectorConfig};
 use futures_rustls::TlsStream;
-use futures_util::{AsyncRead, AsyncReadExt, AsyncWrite};
+use futures_util::{AsyncRead, AsyncReadExt, AsyncWrite, Stream};
 use hyper::rt::ReadBufCursor;
 use hyper_util::client::legacy::connect::{Connected, Connection};
 use tokio::io::{AsyncRead as TAsyncRead, AsyncWrite as TAsyncWrite, ReadBuf};
@@ -120,7 +120,10 @@ impl TAsyncWrite for Writer {
 
 #[trait_make::make(Send)]
 pub trait DnsResolver: Clone {
-    async fn resolve(&mut self, name: &str) -> io::Result<impl IntoIterator<Item = IpAddr>>;
+    async fn resolve(
+        &mut self,
+        name: &str,
+    ) -> io::Result<impl Stream<Item = io::Result<IpAddr>> + Send>;
 }
 
 #[derive(Debug, Clone)]
