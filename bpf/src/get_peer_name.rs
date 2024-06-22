@@ -8,10 +8,10 @@ use aya_log_ebpf::{debug, info};
 
 use crate::kernel_binding::require::__socket_type::SOCK_STREAM;
 use crate::kernel_binding::require::{AF_INET, AF_INET6};
-use crate::map::{PASSIVE_DST_IPV4_ADDR_STORAGE, PASSIVE_DST_IPV6_ADDR_STORAGE};
+use crate::map::{CONNECT_DST_IPV4_ADDR_STORAGE, CONNECT_DST_IPV6_ADDR_STORAGE};
 use crate::{Ipv4Addr, Ipv6Addr};
 
-pub fn getsockname4(ctx: SockAddrContext) -> Result<(), c_long> {
+pub fn getpeername4(ctx: SockAddrContext) -> Result<(), c_long> {
     let sock_addr = unsafe { &mut *ctx.sock_addr };
 
     if sock_addr.type_ != SOCK_STREAM && sock_addr.family != AF_INET {
@@ -20,7 +20,7 @@ pub fn getsockname4(ctx: SockAddrContext) -> Result<(), c_long> {
 
     unsafe {
         let ptr = bpf_sk_storage_get(
-            addr_of_mut!(PASSIVE_DST_IPV4_ADDR_STORAGE) as _,
+            addr_of_mut!(CONNECT_DST_IPV4_ADDR_STORAGE) as _,
             sock_addr.__bindgen_anon_1.sk as _,
             ptr::null_mut(),
             0,
@@ -36,7 +36,7 @@ pub fn getsockname4(ctx: SockAddrContext) -> Result<(), c_long> {
 
         debug!(
             &ctx,
-            "hook ipv4 getsockname done, origin dst addr {:i}:{}",
+            "hook ipv4 getpeername done, origin dst addr {:i}:{}",
             u32::from_be_bytes((*ptr).addr),
             (*ptr).port
         );
@@ -45,7 +45,7 @@ pub fn getsockname4(ctx: SockAddrContext) -> Result<(), c_long> {
     Ok(())
 }
 
-pub fn getsockname6(ctx: SockAddrContext) -> Result<(), c_long> {
+pub fn getpeername6(ctx: SockAddrContext) -> Result<(), c_long> {
     let sock_addr = unsafe { &mut *ctx.sock_addr };
 
     if sock_addr.type_ != SOCK_STREAM && sock_addr.family != AF_INET6 {
@@ -54,7 +54,7 @@ pub fn getsockname6(ctx: SockAddrContext) -> Result<(), c_long> {
 
     unsafe {
         let ptr = bpf_sk_storage_get(
-            addr_of_mut!(PASSIVE_DST_IPV6_ADDR_STORAGE) as _,
+            addr_of_mut!(CONNECT_DST_IPV6_ADDR_STORAGE) as _,
             sock_addr.__bindgen_anon_1.sk as _,
             ptr::null_mut(),
             0,
@@ -94,7 +94,7 @@ pub fn getsockname6(ctx: SockAddrContext) -> Result<(), c_long> {
 
         debug!(
             &ctx,
-            "hook ipv6 getsockname done, origin dst addr [{:i}]:{}",
+            "hook ipv6 getpeername done, origin dst addr [{:i}]:{}",
             (*ptr).addr,
             (*ptr).port
         );
