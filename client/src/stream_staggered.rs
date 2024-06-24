@@ -1,72 +1,51 @@
-use core::async_iter::AsyncIterator;
-use core::future::poll_fn;
-use core::pin::{pin, Pin};
+use core::pin::pin;
 
 use futures_util::future::Either;
 use futures_util::{Stream, StreamExt};
 
 pub trait StreamStaggered: Stream {
-    fn staggered<S: Stream<Item = Self::Item>>(self, s2: S) -> impl AsyncIterator<Item = Self::Item>
+    async gen fn staggered<S: Stream<Item = Self::Item>>(self, s2: S) -> Self::Item
     where
         Self: Sized,
     {
-        staggered(self, s2)
+        let mut s1 = pin!(self);
+        let mut s2 = pin!(s2);
+        let mut last;
+
+        loop {
+            match s1.next().await {
+                Some(item) => yield item,
+                None => {
+                    last = Either::Right(s2);
+
+                    break;
+                }
+            }
+
+            match s2.next().await {
+                Some(item) => yield item,
+                None => {
+                    last = Either::Left(s1);
+
+                    break;
+                }
+            }
+        }
+
+        while let Some(item) = last.next().await {
+            yield item;
+        }
     }
 }
 
 impl<T: Stream> StreamStaggered for T {}
-
-async gen fn staggered<S1, S2>(s1: S1, s2: S2) -> S1::Item
-where
-    S1: Stream,
-    S2: Stream<Item = S1::Item>,
-{
-    let mut s1 = pin!(s1);
-    let mut s2 = pin!(s2);
-    let mut last;
-
-    loop {
-        match s1.next().await {
-            Some(item) => yield item,
-            None => {
-                last = Either::Right(s2);
-
-                break;
-            }
-        }
-
-        match s2.next().await {
-            Some(item) => yield item,
-            None => {
-                last = Either::Left(s1);
-
-                break;
-            }
-        }
-    }
-
-    while let Some(item) = last.next().await {
-        yield item;
-    }
-}
-
-pub trait AsyncIteratorExt: AsyncIterator {
-    async fn next(&mut self) -> Option<Self::Item>
-    where
-        Self: Unpin,
-    {
-        let mut this = Pin::new(self);
-        poll_fn(|cx| this.as_mut().poll_next(cx)).await
-    }
-}
-
-impl<T: AsyncIterator> AsyncIteratorExt for T {}
 
 #[cfg(test)]
 mod tests {
     use futures_util::stream;
 
     use super::*;
+    use crate::async_iter_ext::AsyncIteratorExt;
 
     #[tokio::test]
     async fn staggered() {

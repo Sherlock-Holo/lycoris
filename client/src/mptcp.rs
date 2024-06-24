@@ -5,14 +5,15 @@ use std::net::{IpAddr, SocketAddr, TcpStream as StdTcpStream};
 use std::pin::pin;
 use std::time::Duration;
 
+use futures_util::stream::FuturesUnordered;
 use futures_util::{stream, Stream, StreamExt};
 use libc::{EINPROGRESS, SOCK_NONBLOCK};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::net::TcpStream;
 use tokio::time;
-use tracing::{debug, instrument, warn};
+use tracing::{debug, error, instrument};
 
-use crate::stream_staggered::AsyncIteratorExt;
+use crate::async_iter_ext::AsyncIteratorExt;
 use crate::stream_staggered::StreamStaggered;
 
 pub trait MptcpExt {
@@ -51,42 +52,31 @@ impl MptcpExt for TcpStream {
             }
         }
 
-        let mut ip_count = v4.len() + v6.len();
-        let addrs = stream::iter(v6).staggered(stream::iter(v4));
+        let addrs = stream::iter(v6).staggered(stream::iter(v4)).enumerate();
         let mut addrs = pin!(addrs);
-        let mut last_addr = None;
-        while let Some(addr) = addrs.next().await {
-            ip_count -= 1;
-            if ip_count == 0 {
-                last_addr = Some(addr);
-                break;
-            }
-
-            let connect_fut = time::timeout(Duration::from_millis(250), async {
-                connect_mptcp_addr(addr).await
-            })
-            .await;
-
-            match connect_fut {
-                Err(_) => {
-                    warn!(%addr, "connect timeout with 250ms");
-                }
-                Ok(Err(err)) => {
-                    warn!(%addr, %err, "connect failed");
+        let mut futs = FuturesUnordered::new();
+        while let Some((i, addr)) = addrs.next().await {
+            futs.push(async move {
+                if i > 0 {
+                    time::sleep(Duration::from_millis(250 * i as u64)).await;
                 }
 
-                Ok(Ok(stream)) => {
-                    debug!(%addr, "happy eyeballs connect done");
+                connect_mptcp_addr(addr)
+                    .await
+                    .map(|stream| (stream, addr))
+                    .inspect_err(|err| error!(%err, %addr, "connect failed"))
+            });
+        }
 
-                    return Ok(stream);
-                }
+        while let Some(res) = futs.next().await {
+            if let Ok((stream, addr)) = res {
+                debug!(%addr, "connect done");
+
+                return Ok(stream);
             }
         }
 
-        let last_addr = last_addr.unwrap();
-        debug!(%last_addr, "happy eyeballs failed, use last addr");
-
-        connect_mptcp_addr(last_addr).await
+        Err(io::Error::new(ErrorKind::Other, "all addrs connect failed"))
     }
 }
 
