@@ -10,6 +10,7 @@ use libc::{EINPROGRESS, SOCK_NONBLOCK};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::net::TcpStream;
 use tokio::time;
+use tracing::{debug, instrument, warn};
 
 use crate::stream_staggered::AsyncIteratorExt;
 use crate::stream_staggered::StreamStaggered;
@@ -21,6 +22,7 @@ pub trait MptcpExt {
 }
 
 impl MptcpExt for TcpStream {
+    #[instrument(level = "debug", skip(addrs), err)]
     async fn connect_mptcp<S: Stream<Item = io::Result<SocketAddr>>>(addrs: S) -> io::Result<Self>
     where
         Self: Sized,
@@ -65,12 +67,26 @@ impl MptcpExt for TcpStream {
             })
             .await;
 
-            if let Ok(Ok(stream)) = connect_fut {
-                return Ok(stream);
+            match connect_fut {
+                Err(_) => {
+                    warn!(%addr, "connect timeout with 250ms");
+                }
+                Ok(Err(err)) => {
+                    warn!(%addr, %err, "connect failed");
+                }
+
+                Ok(Ok(stream)) => {
+                    debug!(%addr, "happy eyeballs connect done");
+
+                    return Ok(stream);
+                }
             }
         }
 
-        connect_mptcp_addr(last_addr.unwrap()).await
+        let last_addr = last_addr.unwrap();
+        debug!(%last_addr, "happy eyeballs failed, use last addr");
+
+        connect_mptcp_addr(last_addr).await
     }
 }
 
