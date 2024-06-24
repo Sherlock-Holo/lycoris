@@ -1,7 +1,9 @@
 use std::io;
 use std::net::SocketAddr;
+use std::pin::pin;
 
-use futures_util::Stream;
+use futures_util::stream::FuturesUnordered;
+use futures_util::{stream, Stream, StreamExt};
 use hyper_util::rt::{TokioExecutor, TokioTimer};
 use protocol::auth::Auth;
 use protocol::connect::TcpConnector;
@@ -23,9 +25,38 @@ impl TcpConnector for TokioConnector {
         &mut self,
         addrs: S,
     ) -> io::Result<Self::ConnectedTcpStream> {
-        let tcp_stream = TcpStream::connect_mptcp(addrs).await?;
+        let mut v6 = vec![];
+        let mut v4 = vec![];
+        let mut addrs = pin!(addrs);
+        let mut last_err = None;
+        while let Some(addr) = addrs.next().await {
+            match addr {
+                Err(err) => {
+                    last_err = Some(err);
+                }
 
-        Ok(TokioTcp::from(tcp_stream))
+                Ok(SocketAddr::V4(addr)) => {
+                    v4.push(Ok(SocketAddr::V4(addr)));
+                }
+                Ok(SocketAddr::V6(addr)) => {
+                    v6.push(Ok(SocketAddr::V6(addr)));
+                }
+            }
+        }
+        if let Some(err) = last_err {
+            if v4.is_empty() && v6.is_empty() {
+                return Err(err);
+            }
+        }
+
+        let mut futs = FuturesUnordered::new();
+        futs.push(TcpStream::connect_mptcp(stream::iter(v6)));
+        futs.push(TcpStream::connect_mptcp(stream::iter(v4)));
+
+        match futs.next().await.unwrap() {
+            Err(_) => futs.next().await.unwrap().map(Into::into),
+            Ok(stream) => Ok(stream.into()),
+        }
     }
 }
 
