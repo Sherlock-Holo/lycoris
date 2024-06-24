@@ -1,4 +1,6 @@
 #![feature(impl_trait_in_assoc_type)]
+#![feature(gen_blocks)]
+#![feature(async_iterator)]
 
 use std::ffi::CString;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6};
@@ -47,6 +49,7 @@ mod connect;
 mod listener;
 mod mptcp;
 mod owned_link;
+mod stream_staggered;
 
 pub async fn run() -> anyhow::Result<()> {
     let args = Args::parse();

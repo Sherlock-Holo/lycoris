@@ -3,11 +3,16 @@ use std::io;
 use std::io::ErrorKind;
 use std::net::{SocketAddr, TcpStream as StdTcpStream};
 use std::pin::pin;
+use std::time::Duration;
 
-use futures_util::{Stream, StreamExt};
+use futures_util::{stream, Stream, StreamExt};
 use libc::{EINPROGRESS, SOCK_NONBLOCK};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::net::TcpStream;
+use tokio::time;
+
+use crate::stream_staggered::AsyncIteratorExt;
+use crate::stream_staggered::StreamStaggered;
 
 pub trait MptcpExt {
     async fn connect_mptcp<S: Stream<Item = io::Result<SocketAddr>>>(addrs: S) -> io::Result<Self>
@@ -20,29 +25,52 @@ impl MptcpExt for TcpStream {
     where
         Self: Sized,
     {
+        let mut v6 = vec![];
+        let mut v4 = vec![];
         let mut addrs = pin!(addrs);
         let mut last_err = None;
         while let Some(addr) = addrs.next().await {
-            let addr = match addr {
-                Err(err) => {
-                    last_err = Some(err);
-
-                    continue;
-                }
-
-                Ok(addr) => addr,
-            };
-
-            match connect_mptcp_addr(addr).await {
+            match addr {
                 Err(err) => {
                     last_err = Some(err);
                 }
 
-                Ok(stream) => return Ok(stream),
+                Ok(SocketAddr::V4(addr)) => {
+                    v4.push(SocketAddr::V4(addr));
+                }
+                Ok(SocketAddr::V6(addr)) => {
+                    v6.push(SocketAddr::V6(addr));
+                }
+            }
+        }
+        if let Some(err) = last_err {
+            if v4.is_empty() && v6.is_empty() {
+                return Err(err);
             }
         }
 
-        Err(last_err.unwrap_or_else(|| io::Error::new(ErrorKind::Other, "addrs is empty")))
+        let mut ip_count = v4.len() + v6.len();
+        let addrs = stream::iter(v6).staggered(stream::iter(v4));
+        let mut addrs = pin!(addrs);
+        let mut last_addr = None;
+        while let Some(addr) = addrs.next().await {
+            ip_count -= 1;
+            if ip_count == 0 {
+                last_addr = Some(addr);
+                break;
+            }
+
+            let connect_fut = time::timeout(Duration::from_millis(250), async {
+                connect_mptcp_addr(addr).await
+            })
+            .await;
+
+            if let Ok(Ok(stream)) = connect_fut {
+                return Ok(stream);
+            }
+        }
+
+        connect_mptcp_addr(last_addr.unwrap()).await
     }
 }
 
