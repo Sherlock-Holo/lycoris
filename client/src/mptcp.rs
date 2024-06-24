@@ -1,7 +1,7 @@
 use std::ffi::c_int;
 use std::io;
 use std::io::ErrorKind;
-use std::net::{SocketAddr, TcpStream as StdTcpStream};
+use std::net::{IpAddr, SocketAddr, TcpStream as StdTcpStream};
 use std::pin::pin;
 use std::time::Duration;
 
@@ -74,14 +74,13 @@ impl MptcpExt for TcpStream {
     }
 }
 
-async fn connect_mptcp_addr(addr: SocketAddr) -> io::Result<TcpStream> {
-    let domain = match addr {
-        SocketAddr::V4(_) => Domain::IPV4,
-        SocketAddr::V6(_) => Domain::IPV6,
-    };
-
+async fn connect_mptcp_addr(mut addr: SocketAddr) -> io::Result<TcpStream> {
     let ty = Type::from(SOCK_NONBLOCK | c_int::from(Type::STREAM));
-    let socket = Socket::new(domain, ty, Some(Protocol::MPTCP))?;
+    let socket = Socket::new(Domain::IPV6, ty, Some(Protocol::MPTCP))?;
+
+    if let IpAddr::V4(ip) = addr.ip() {
+        addr.set_ip(ip.to_ipv6_mapped().into());
+    }
 
     let sock_addr = SockAddr::from(addr);
     match socket.connect(&sock_addr) {
