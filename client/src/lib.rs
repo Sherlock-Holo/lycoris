@@ -1,4 +1,4 @@
-#![feature(impl_trait_in_assoc_type, gen_blocks, async_iterator, async_closure)]
+#![feature(impl_trait_in_assoc_type, gen_blocks, async_iterator)]
 
 use std::ffi::CString;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6};
@@ -39,7 +39,6 @@ pub use crate::listener::Listener;
 pub use crate::owned_link::OwnedLink;
 
 mod args;
-mod async_iter_ext;
 pub mod bpf_map_name;
 pub mod bpf_share;
 mod client;

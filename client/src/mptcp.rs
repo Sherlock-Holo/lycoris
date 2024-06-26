@@ -9,12 +9,11 @@ use std::time::Duration;
 use futures_util::stream::FuturesUnordered;
 use futures_util::{Stream, StreamExt};
 use libc::{EINPROGRESS, SOCK_NONBLOCK};
+use share::async_iter_ext::AsyncIteratorExt;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::net::TcpStream;
 use tokio::time;
 use tracing::{debug, error, instrument, warn};
-
-use crate::async_iter_ext::AsyncIteratorExt;
 
 pub trait MptcpExt {
     async fn connect_mptcp<S: Stream<Item = io::Result<SocketAddr>>>(addrs: S) -> io::Result<Self>
