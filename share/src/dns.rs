@@ -2,8 +2,9 @@ use std::io;
 use std::net::IpAddr;
 
 use futures_util::{stream, Stream, StreamExt};
+use hickory_resolver::config::LookupIpStrategy;
 use hickory_resolver::name_server::{GenericConnector, TokioRuntimeProvider};
-use hickory_resolver::AsyncResolver;
+use hickory_resolver::{system_conf, AsyncResolver};
 use protocol::DnsResolver;
 
 #[derive(Clone)]
@@ -13,7 +14,9 @@ pub struct HickoryDnsResolver {
 
 impl HickoryDnsResolver {
     pub fn new() -> io::Result<Self> {
-        let resolver = AsyncResolver::tokio_from_system_conf()?;
+        let (config, mut opts) = system_conf::read_system_conf()?;
+        opts.ip_strategy = LookupIpStrategy::Ipv6thenIpv4;
+        let resolver = AsyncResolver::tokio(config, opts);
 
         Ok(Self { resolver })
     }
