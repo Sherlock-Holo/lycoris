@@ -48,7 +48,6 @@ mod connect;
 mod listener;
 mod mptcp;
 mod owned_link;
-mod stream_staggered;
 
 pub async fn run() -> anyhow::Result<()> {
     let args = Args::parse();

@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::ffi::c_int;
 use std::io;
 use std::io::ErrorKind;
@@ -6,15 +7,14 @@ use std::pin::pin;
 use std::time::Duration;
 
 use futures_util::stream::FuturesUnordered;
-use futures_util::{stream, Stream, StreamExt};
+use futures_util::{Stream, StreamExt};
 use libc::{EINPROGRESS, SOCK_NONBLOCK};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::net::TcpStream;
 use tokio::time;
-use tracing::{debug, error, instrument};
+use tracing::{debug, error, instrument, warn};
 
 use crate::async_iter_ext::AsyncIteratorExt;
-use crate::stream_staggered::StreamStaggered;
 
 pub trait MptcpExt {
     async fn connect_mptcp<S: Stream<Item = io::Result<SocketAddr>>>(addrs: S) -> io::Result<Self>
@@ -28,34 +28,19 @@ impl MptcpExt for TcpStream {
     where
         Self: Sized,
     {
-        let mut v6 = vec![];
-        let mut v4 = vec![];
-        let mut addrs = pin!(addrs);
-        let mut last_err = None;
-        while let Some(addr) = addrs.next().await {
-            match addr {
-                Err(err) => {
-                    last_err = Some(err);
-                }
-
-                Ok(SocketAddr::V4(addr)) => {
-                    v4.push(SocketAddr::V4(addr));
-                }
-                Ok(SocketAddr::V6(addr)) => {
-                    v6.push(SocketAddr::V6(addr));
-                }
-            }
-        }
-        if let Some(err) = last_err {
-            if v4.is_empty() && v6.is_empty() {
-                return Err(err);
-            }
-        }
-
-        let addrs = stream::iter(v6).staggered(stream::iter(v4)).enumerate();
-        let mut addrs = pin!(addrs);
+        let mut addrs = pin!(reorder_addrs(addrs).enumerate());
         let mut futs = FuturesUnordered::new();
         while let Some((i, addr)) = addrs.next().await {
+            let addr = match addr {
+                Err(err) => {
+                    warn!(%err, "resolve addr failed");
+
+                    continue;
+                }
+
+                Ok(addr) => addr,
+            };
+
             futs.push(async move {
                 if i > 0 {
                     time::sleep(Duration::from_millis(250 * i as u64)).await;
@@ -77,6 +62,63 @@ impl MptcpExt for TcpStream {
         }
 
         Err(io::Error::new(ErrorKind::Other, "all addrs connect failed"))
+    }
+}
+
+async gen fn reorder_addrs<S: Stream<Item = io::Result<SocketAddr>>>(
+    addrs: S,
+) -> io::Result<SocketAddr> {
+    let mut v6 = VecDeque::new();
+    let mut v4 = VecDeque::new();
+    let mut yield_v6 = true;
+    let mut addrs = pin!(addrs);
+
+    loop {
+        if yield_v6 {
+            if let Some(addr) = v6.pop_front() {
+                yield_v6 = false;
+
+                yield Ok(addr);
+            }
+
+            match addrs.next().await {
+                None => return,
+                Some(Err(err)) => yield Err(err),
+                Some(Ok(addr)) => {
+                    if addr.is_ipv4() {
+                        v4.push_back(addr);
+
+                        continue;
+                    }
+
+                    yield_v6 = false;
+
+                    yield Ok(addr)
+                }
+            }
+        } else {
+            if let Some(addr) = v4.pop_front() {
+                yield_v6 = true;
+
+                yield Ok(addr);
+            }
+
+            match addrs.next().await {
+                None => return,
+                Some(Err(err)) => yield Err(err),
+                Some(Ok(addr)) => {
+                    if addr.is_ipv6() {
+                        v6.push_back(addr);
+
+                        continue;
+                    }
+
+                    yield_v6 = true;
+
+                    yield Ok(addr)
+                }
+            }
+        }
     }
 }
 
