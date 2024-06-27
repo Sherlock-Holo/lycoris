@@ -2,6 +2,7 @@ use core::async_iter::AsyncIterator;
 use core::future::poll_fn;
 use core::pin::{pin, Pin};
 
+#[allow(async_fn_in_trait)]
 pub trait AsyncIteratorExt: AsyncIterator {
     async fn next(&mut self) -> Option<Self::Item>
     where
