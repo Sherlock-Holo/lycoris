@@ -2,18 +2,18 @@ use std::collections::VecDeque;
 use std::ffi::c_int;
 use std::io;
 use std::io::ErrorKind;
-use std::net::{IpAddr, SocketAddr, TcpStream as StdTcpStream};
+use std::net::{IpAddr, SocketAddr};
 use std::pin::pin;
 use std::time::Duration;
 
 use futures_util::stream::FuturesUnordered;
 use futures_util::{Stream, StreamExt};
-use libc::{EINPROGRESS, SOCK_NONBLOCK};
+use libc::SOCK_NONBLOCK;
 use share::async_iter_ext::AsyncIteratorExt;
-use socket2::{Domain, Protocol, SockAddr, Socket, Type};
-use tokio::net::TcpStream;
+use socket2::{Domain, Protocol, Socket, Type};
+use tokio::net::{TcpSocket, TcpStream};
 use tokio::time;
-use tracing::{debug, error, instrument, warn};
+use tracing::{error, info, instrument, warn};
 
 pub trait MptcpExt {
     async fn connect_mptcp<S: Stream<Item = io::Result<SocketAddr>>>(addrs: S) -> io::Result<Self>
@@ -54,7 +54,7 @@ impl MptcpExt for TcpStream {
 
         while let Some(res) = futs.next().await {
             if let Ok((stream, addr)) = res {
-                debug!(%addr, "connect done");
+                info!(%addr, "happy eyeballs connect done");
 
                 return Ok(stream);
             }
@@ -124,30 +124,11 @@ async gen fn reorder_addrs<S: Stream<Item = io::Result<SocketAddr>>>(
 async fn connect_mptcp_addr(mut addr: SocketAddr) -> io::Result<TcpStream> {
     let ty = Type::from(SOCK_NONBLOCK | c_int::from(Type::STREAM));
     let socket = Socket::new(Domain::IPV6, ty, Some(Protocol::MPTCP))?;
-
     if let IpAddr::V4(ip) = addr.ip() {
         addr.set_ip(ip.to_ipv6_mapped().into());
     }
 
-    let sock_addr = SockAddr::from(addr);
-    match socket.connect(&sock_addr) {
-        Err(err) if err.kind() == ErrorKind::WouldBlock => {}
-        Err(err) => {
-            if let Some(raw_err) = err.raw_os_error() {
-                if raw_err != EINPROGRESS {
-                    return Err(err);
-                }
-            } else {
-                return Err(err);
-            }
-        }
-
-        Ok(_) => {}
-    }
-
-    let std_tcp_stream = StdTcpStream::from(socket);
-    let tcp_stream = TcpStream::from_std(std_tcp_stream)?;
-    tcp_stream.writable().await?;
-
-    Ok(tcp_stream)
+    TcpSocket::from_std_stream(socket.into())
+        .connect(addr)
+        .await
 }

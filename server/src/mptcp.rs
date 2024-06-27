@@ -1,10 +1,10 @@
 use std::ffi::c_int;
 use std::io;
-use std::net::{IpAddr, SocketAddr, TcpListener as StdTcpListener};
+use std::net::{IpAddr, SocketAddr};
 
 use libc::SOCK_NONBLOCK;
 use socket2::{Domain, Protocol, Socket, Type};
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpSocket};
 
 #[allow(async_fn_in_trait)]
 pub trait MptcpListenerExt {
@@ -14,25 +14,20 @@ pub trait MptcpListenerExt {
 }
 
 impl MptcpListenerExt for TcpListener {
-    async fn listen_mptcp(addr: SocketAddr) -> io::Result<Self>
+    async fn listen_mptcp(mut addr: SocketAddr) -> io::Result<Self>
     where
         Self: Sized,
     {
-        let domain = match addr.ip() {
-            IpAddr::V4(_) => Domain::IPV4,
-            IpAddr::V6(_) => Domain::IPV6,
-        };
-
         let ty = Type::from(SOCK_NONBLOCK | c_int::from(Type::STREAM));
-        let socket = Socket::new(domain, ty, Some(Protocol::MPTCP))?;
+        let socket = Socket::new(Domain::IPV6, ty, Some(Protocol::MPTCP))?;
         socket.set_reuse_address(true)?;
         socket.set_reuse_port(true)?;
+        if let IpAddr::V4(ip) = addr.ip() {
+            addr.set_ip(ip.to_ipv6_mapped().into());
+        }
 
-        socket.bind(&addr.into())?;
-        socket.listen(1024)?;
-
-        let std_tcp_listener = StdTcpListener::from(socket);
-
-        TcpListener::from_std(std_tcp_listener)
+        let tcp_socket = TcpSocket::from_std_stream(socket.into());
+        tcp_socket.bind(addr)?;
+        tcp_socket.listen(1024)
     }
 }
