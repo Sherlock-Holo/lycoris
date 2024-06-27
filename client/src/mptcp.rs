@@ -13,7 +13,7 @@ use share::async_iter_ext::AsyncIteratorExt;
 use socket2::{Domain, Protocol, Socket, Type};
 use tokio::net::{TcpSocket, TcpStream};
 use tokio::time;
-use tracing::{error, info, instrument, warn};
+use tracing::{debug, error, instrument, warn};
 
 pub trait MptcpExt {
     async fn connect_mptcp<S: Stream<Item = io::Result<SocketAddr>>>(addrs: S) -> io::Result<Self>
@@ -45,6 +45,8 @@ impl MptcpExt for TcpStream {
                     time::sleep(Duration::from_millis(250 * i as u64)).await;
                 }
 
+                debug!(%addr, "start happy eyeballs connect");
+
                 connect_mptcp_addr(addr)
                     .await
                     .map(|stream| (stream, addr))
@@ -54,7 +56,7 @@ impl MptcpExt for TcpStream {
 
         while let Some(res) = futs.next().await {
             if let Ok((stream, addr)) = res {
-                info!(%addr, "happy eyeballs connect done");
+                debug!(%addr, "happy eyeballs connect done");
 
                 return Ok(stream);
             }
