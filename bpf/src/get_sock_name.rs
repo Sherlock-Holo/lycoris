@@ -72,7 +72,6 @@ pub fn getsockname6(ctx: SockAddrContext) -> Result<(), c_long> {
                 sock_addr.user_ip6[1] = addr[1];
                 sock_addr.user_ip6[2] = addr[2];
                 sock_addr.user_ip6[3] = addr[3];
-                sock_addr.user_port = (*ptr).port.to_be() as _;
             }
 
             Some(mut ipv4) => {
@@ -91,6 +90,8 @@ pub fn getsockname6(ctx: SockAddrContext) -> Result<(), c_long> {
                 sock_addr.user_ip6[3] = ipv4.to_bits().to_be();
             }
         }
+
+        sock_addr.user_port = (*ptr).port.to_be() as _;
 
         debug!(
             &ctx,
