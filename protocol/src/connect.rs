@@ -12,7 +12,7 @@ use futures_rustls::pki_types::{DnsName, ServerName};
 pub use futures_rustls::rustls::ClientConfig;
 use futures_rustls::TlsConnector;
 use futures_util::future::BoxFuture;
-use futures_util::{stream, AsyncRead, AsyncWrite, Stream, TryStreamExt};
+use futures_util::{stream, AsyncRead, AsyncWrite, SinkExt, Stream, TryStreamExt};
 use http::{Request, StatusCode, Uri, Version};
 use http_body_util::combinators::BoxBody;
 use http_body_util::StreamBody;
@@ -118,9 +118,10 @@ impl<DR: DnsResolver + Sync + 'static, TC: TcpConnector + Sync + 'static> HyperC
         let token = self.inner.token_generator.generate_token();
         let remote_addr_data = remote_addr.encode();
 
-        let (req_body_tx, req_body_rx) = mpsc::unbounded();
+        let (mut req_body_tx, req_body_rx) = mpsc::channel(1);
         req_body_tx
-            .unbounded_send(Ok(Frame::data(remote_addr_data)))
+            .send(Ok(Frame::data(remote_addr_data)))
+            .await
             .expect("unbounded_send should not fail");
 
         let request = Request::builder()

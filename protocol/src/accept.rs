@@ -233,7 +233,7 @@ impl HyperServerHandler {
 
         info!(?addrs, "get remote addrs done");
 
-        let (body_tx, body_rx) = mpsc::unbounded();
+        let (body_tx, body_rx) = mpsc::channel(1);
         let response = Response::new(StreamBody::new(body_rx).boxed());
         let stream_reader = StreamReader::new(BodyStream::from(body));
         let sink_body_sender = SinkBodySender::from(body_tx);

@@ -4,7 +4,7 @@ use std::pin::Pin;
 use std::task::{ready, Context, Poll};
 
 use bytes::Bytes;
-use futures_channel::mpsc::UnboundedSender;
+use futures_channel::mpsc::Sender;
 use futures_util::{Sink, SinkExt, Stream};
 use http::HeaderMap;
 use hyper::body::{Body, Frame, Incoming};
@@ -40,12 +40,12 @@ impl Stream for BodyStream {
 
 #[derive(Debug)]
 pub struct SinkBodySender<E> {
-    sender: UnboundedSender<Result<Frame<Bytes>, E>>,
+    sender: Sender<Result<Frame<Bytes>, E>>,
     is_trailer_sent: bool,
 }
 
-impl<E> From<UnboundedSender<Result<Frame<Bytes>, E>>> for SinkBodySender<E> {
-    fn from(value: UnboundedSender<Result<Frame<Bytes>, E>>) -> Self {
+impl<E> From<Sender<Result<Frame<Bytes>, E>>> for SinkBodySender<E> {
+    fn from(value: Sender<Result<Frame<Bytes>, E>>) -> Self {
         Self {
             sender: value,
             is_trailer_sent: false,
@@ -57,7 +57,7 @@ impl<'a, E> Sink<&'a [u8]> for SinkBodySender<E> {
     type Error = io::Error;
 
     #[inline]
-    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.sender
             .poll_ready(cx)
             .map_err(|err| io::Error::new(ErrorKind::Other, err))
@@ -80,8 +80,10 @@ impl<'a, E> Sink<&'a [u8]> for SinkBodySender<E> {
     #[inline]
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         if !self.is_trailer_sent {
+            ready!(self.as_mut().poll_ready(cx))?;
+
             self.sender
-                .unbounded_send(Ok(Frame::trailers(HeaderMap::new())))
+                .start_send_unpin(Ok(Frame::trailers(HeaderMap::new())))
                 .map_err(|_| io::Error::from(ErrorKind::BrokenPipe))?;
 
             self.is_trailer_sent = true;
