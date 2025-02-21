@@ -4,9 +4,10 @@ use std::path::Path;
 
 use args::Args;
 use clap::Parser;
-use futures_rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
+use futures_rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use futures_rustls::rustls::ServerConfig;
 use protocol::auth::Auth;
+use rustls_pemfile::Item;
 use share::log::init_log;
 use tokio::fs;
 use tokio::net::TcpListener;
@@ -35,10 +36,10 @@ pub async fn run() -> Result<(), Error> {
     info!(token_header = %config.token_header, "get token header");
 
     let certs = load_certs(&config.cert).await?;
-    let mut keys = load_keys(&config.key).await?;
+    let key = load_key(&config.key).await?;
     let server_config = ServerConfig::builder()
         .with_no_client_auth()
-        .with_single_cert(certs, keys.remove(0).into())?;
+        .with_single_cert(certs, key)?;
 
     let tcp_listener = TcpListener::listen_mptcp(config.listen_addr).await?;
 
@@ -56,8 +57,25 @@ async fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>, Error> 
     Ok(rustls_pemfile::certs(&mut certs.as_slice()).collect::<Result<Vec<_>, _>>()?)
 }
 
-async fn load_keys(path: &Path) -> Result<Vec<PrivatePkcs8KeyDer<'static>>, Error> {
-    let keys = fs::read(path).await?;
+async fn load_key(path: &Path) -> Result<PrivateKeyDer<'static>, Error> {
+    let data = fs::read(path).await?;
 
-    Ok(rustls_pemfile::pkcs8_private_keys(&mut keys.as_slice()).collect::<Result<Vec<_>, _>>()?)
+    let item = rustls_pemfile::read_one_from_slice(&data)?
+        .ok_or_else(|| Error::Other("no key found".into()))?
+        .0;
+
+    match item {
+        Item::X509Certificate(_) | Item::SubjectPublicKeyInfo(_) => {
+            Err(Error::Other("certificate is not private key".into()))
+        }
+
+        Item::Crl(_) => Err(Error::Other("crl is not private key".into())),
+        Item::Csr(_) => Err(Error::Other("csr is not private key".into())),
+
+        Item::Pkcs1Key(key) => Ok(key.into()),
+        Item::Pkcs8Key(key) => Ok(key.into()),
+        Item::Sec1Key(key) => Ok(key.into()),
+
+        _ => Err(Error::Other("unknown key file".into())),
+    }
 }

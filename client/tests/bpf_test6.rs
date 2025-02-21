@@ -5,8 +5,8 @@ use std::net::{SocketAddrV4, SocketAddrV6};
 use std::path::Path;
 use std::str::FromStr;
 
-use aya::maps::lpm_trie::{Key, LpmTrie};
 use aya::maps::Array;
+use aya::maps::lpm_trie::{Key, LpmTrie};
 use aya::programs::cgroup_sock_addr::CgroupSockAddrLink;
 use aya::programs::{CgroupSockAddr, SockOps};
 use aya::{Bpf, BpfLoader};

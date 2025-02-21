@@ -4,7 +4,7 @@ use tracing::level_filters::LevelFilter;
 use tracing::subscriber;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::{fmt, Registry};
+use tracing_subscriber::{Registry, fmt};
 
 pub fn init_log(debug: bool) {
     let layer = fmt::layer()

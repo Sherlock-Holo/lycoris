@@ -30,4 +30,13 @@ pub enum Error {
 
     #[error("build tls config failed: {0}")]
     TlsConfig(#[from] futures_rustls::rustls::Error),
+
+    #[error("parse tls file failed: {0:?}")]
+    TlsFile(rustls_pemfile::Error),
+}
+
+impl From<rustls_pemfile::Error> for Error {
+    fn from(value: rustls_pemfile::Error) -> Self {
+        Self::TlsFile(value)
+    }
 }

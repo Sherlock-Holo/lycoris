@@ -142,10 +142,10 @@ impl DomainOrSocketAddr {
     pub fn encode(self) -> Bytes {
         match self {
             DomainOrSocketAddr::Domain { domain, port } => {
-                let mut buf = BytesMut::with_capacity(1 + 2 + domain.as_bytes().len() + 2);
+                let mut buf = BytesMut::with_capacity(1 + 2 + domain.len() + 2);
 
                 buf.put_u8(1);
-                buf.put_u16(domain.as_bytes().len() as _);
+                buf.put_u16(domain.len() as _);
                 buf.put(domain.as_bytes());
                 buf.put_u16(port);
 

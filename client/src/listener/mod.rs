@@ -1,8 +1,8 @@
 use protocol::DomainOrSocketAddr;
 use tokio::io;
 use tokio::io::{AsyncRead, AsyncWrite, BufStream, ReadHalf, WriteHalf};
-use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::TcpStream;
+use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 
 pub mod bpf;
 

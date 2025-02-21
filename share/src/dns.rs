@@ -2,9 +2,9 @@ use std::io;
 use std::net::IpAddr;
 
 use futures_util::future::join;
-use futures_util::{stream, Stream};
-use hickory_resolver::name_server::{GenericConnector, TokioRuntimeProvider};
+use futures_util::{Stream, stream};
 use hickory_resolver::AsyncResolver;
+use hickory_resolver::name_server::{GenericConnector, TokioRuntimeProvider};
 use protocol::DnsResolver;
 
 #[derive(Clone)]

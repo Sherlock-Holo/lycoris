@@ -1,6 +1,6 @@
 use core::async_iter::AsyncIterator;
 use core::future::poll_fn;
-use core::pin::{pin, Pin};
+use core::pin::{Pin, pin};
 
 #[allow(async_fn_in_trait)]
 pub trait AsyncIteratorExt: AsyncIterator {

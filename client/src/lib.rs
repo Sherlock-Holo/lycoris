@@ -5,18 +5,18 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6};
 use std::path::Path;
 use std::str::FromStr;
 
-use aya::maps::lpm_trie::{Key, LpmTrie};
 use aya::maps::Array;
+use aya::maps::lpm_trie::{Key, LpmTrie};
 use aya::programs::cgroup_sock_addr::CgroupSockAddrLink;
 use aya::programs::{CgroupSockAddr, Link, SockOps};
-use aya::{maps, Bpf, BpfLoader};
+use aya::{Bpf, BpfLoader, maps};
 use aya_log::BpfLogger;
 use cidr::{Ipv4Inet, Ipv6Inet};
 use clap::Parser;
 use futures_rustls::rustls::{ClientConfig, RootCertStore};
-use futures_util::{future, StreamExt};
-use hickory_resolver::error::ResolveErrorKind;
+use futures_util::{StreamExt, future};
 use hickory_resolver::AsyncResolver;
+use hickory_resolver::error::ResolveErrorKind;
 use protocol::auth::Auth;
 use share::log::init_log;
 use tokio::fs::{self, File};
@@ -33,9 +33,9 @@ use crate::config::Config;
 #[doc(hidden)]
 pub use crate::connect::hyper::HyperConnector;
 #[doc(hidden)]
-pub use crate::listener::bpf::BpfListener;
-#[doc(hidden)]
 pub use crate::listener::Listener;
+#[doc(hidden)]
+pub use crate::listener::bpf::BpfListener;
 pub use crate::owned_link::OwnedLink;
 
 mod args;

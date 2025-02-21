@@ -3,7 +3,7 @@ use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 
 use anyhow::Context;
 use futures_util::stream::SelectAll;
-use futures_util::{stream, StreamExt};
+use futures_util::{StreamExt, stream};
 use protocol::DomainOrSocketAddr;
 use share::tcp_wrapper::TcpListenerAddrStream;
 use tap::TapFallible;

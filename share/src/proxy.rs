@@ -1,6 +1,6 @@
 use std::io::Error;
 
-use futures_util::{future, FutureExt};
+use futures_util::{FutureExt, future};
 use tap::TapFallible;
 use tokio::io::{self, AsyncRead, AsyncWrite, AsyncWriteExt};
 use tracing::error;
