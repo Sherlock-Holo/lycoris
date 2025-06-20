@@ -12,7 +12,7 @@ pub trait AsyncIteratorExt: AsyncIterator {
         poll_fn(|cx| this.as_mut().poll_next(cx)).await
     }
 
-    async gen fn enumerate(mut self) -> (usize, Self::Item)
+    async gen fn enumerate(self) -> (usize, Self::Item)
     where
         Self: Sized,
     {

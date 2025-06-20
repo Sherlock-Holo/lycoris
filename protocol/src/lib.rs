@@ -1,5 +1,5 @@
 use std::convert::Infallible;
-use std::io::{ErrorKind, IoSlice};
+use std::io::IoSlice;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::pin::Pin;
 use std::task::{ready, Context, Poll};
@@ -186,8 +186,7 @@ impl DomainOrSocketAddr {
 
                 let mut domain = vec![0; u16::from_be_bytes(domain_len) as _];
                 reader.read_exact(&mut domain).await?;
-                let domain = String::from_utf8(domain)
-                    .map_err(|err| io::Error::new(ErrorKind::Other, err))?;
+                let domain = String::from_utf8(domain).map_err(io::Error::other)?;
 
                 let mut port = [0; 2];
                 reader.read_exact(&mut port).await?;
@@ -212,12 +211,7 @@ impl DomainOrSocketAddr {
                 IpAddr::from(Ipv6Addr::from(addr))
             }
 
-            _ => {
-                return Err(io::Error::new(
-                    ErrorKind::Other,
-                    format!("unknown type {}", r#type[0]),
-                ))
-            }
+            _ => return Err(io::Error::other(format!("unknown type {}", r#type[0]))),
         };
 
         let mut port = [0; 2];

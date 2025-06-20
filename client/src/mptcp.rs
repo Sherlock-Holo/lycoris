@@ -1,7 +1,6 @@
 use std::collections::VecDeque;
 use std::ffi::c_int;
 use std::io;
-use std::io::ErrorKind;
 use std::net::{IpAddr, SocketAddr};
 use std::pin::pin;
 use std::time::Duration;
@@ -62,7 +61,7 @@ impl MptcpExt for TcpStream {
             }
         }
 
-        Err(io::Error::new(ErrorKind::Other, "all addrs connect failed"))
+        Err(io::Error::other("all addrs connect failed"))
     }
 }
 

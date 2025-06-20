@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 use std::future::Future;
-use std::io::{self, ErrorKind};
+use std::io::{self};
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -185,14 +185,13 @@ impl<TC: TcpConnector + Sync + 'static, DR: DnsResolver + 'static> Service<Uri>
         Box::pin(async move {
             let host = req
                 .host()
-                .ok_or_else(|| io::Error::new(ErrorKind::Other, "miss host"))?
+                .ok_or_else(|| io::Error::other("miss host"))?
                 .trim_start_matches('[')
                 .trim_end_matches(']');
 
             let port = req.port_u16().unwrap_or(443);
 
-            let server_name =
-                ServerName::try_from(host).map_err(|err| io::Error::new(ErrorKind::Other, err))?;
+            let server_name = ServerName::try_from(host).map_err(io::Error::other)?;
             let server_name = server_name.to_owned();
 
             let tcp_stream = match &server_name {
@@ -205,10 +204,9 @@ impl<TC: TcpConnector + Sync + 'static, DR: DnsResolver + 'static> Service<Uri>
                 ServerName::DnsName(dns_name) => this.connect_dns_name(dns_name, port).await?,
 
                 _ => {
-                    return Err(io::Error::new(
-                        ErrorKind::Other,
-                        format!("unknown server name {server_name:?}"),
-                    ));
+                    return Err(io::Error::other(format!(
+                        "unknown server name {server_name:?}"
+                    )));
                 }
             };
 

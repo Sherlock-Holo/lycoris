@@ -24,6 +24,7 @@ mod hidden {
 
     pub type TokioTcpAcceptor = impl Stream<Item = io::Result<TokioTcp>> + Send + Unpin;
 
+    #[define_opaque(TokioTcpAcceptor)]
     pub fn new_it(tcp_listener: TcpListener) -> TokioTcpAcceptor {
         TcpListenerAddrStream::from(tcp_listener).map_ok(|(stream, _)| TokioTcp::from(stream))
     }

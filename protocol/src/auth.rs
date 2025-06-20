@@ -37,7 +37,7 @@ impl Auth {
     pub fn generate_token(&self) -> String {
         self.totp
             .generate_current()
-            .unwrap_or_else(|err| panic!("generate current token failed: {}", err))
+            .unwrap_or_else(|err| panic!("generate current token failed: {err}"))
     }
 
     pub fn auth(&self, token: &str) -> bool {

@@ -27,7 +27,7 @@ impl Stream for BodyStream {
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let result = Pin::new(&mut self.body)
             .poll_frame(cx)
-            .map_err(|err| io::Error::new(ErrorKind::Other, err))?;
+            .map_err(io::Error::other)?;
         match ready!(result) {
             None => Poll::Ready(None),
             Some(frame) => match frame.into_data() {
@@ -58,23 +58,19 @@ impl<'a, E> Sink<&'a [u8]> for SinkBodySender<E> {
 
     #[inline]
     fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.sender
-            .poll_ready(cx)
-            .map_err(|err| io::Error::new(ErrorKind::Other, err))
+        self.sender.poll_ready(cx).map_err(io::Error::other)
     }
 
     #[inline]
     fn start_send(mut self: Pin<&mut Self>, item: &'a [u8]) -> Result<(), Self::Error> {
         self.sender
             .start_send_unpin(Ok(Frame::data(Bytes::copy_from_slice(item))))
-            .map_err(|err| io::Error::new(ErrorKind::Other, err))
+            .map_err(io::Error::other)
     }
 
     #[inline]
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.sender
-            .poll_flush_unpin(cx)
-            .map_err(|err| io::Error::new(ErrorKind::Other, err))
+        self.sender.poll_flush_unpin(cx).map_err(io::Error::other)
     }
 
     #[inline]
@@ -89,8 +85,6 @@ impl<'a, E> Sink<&'a [u8]> for SinkBodySender<E> {
             self.is_trailer_sent = true;
         }
 
-        self.sender
-            .poll_close_unpin(cx)
-            .map_err(|err| io::Error::new(ErrorKind::Other, err))
+        self.sender.poll_close_unpin(cx).map_err(io::Error::other)
     }
 }
