@@ -400,9 +400,11 @@ async fn load_connector(
         }
     }
 
-    let client_config = ClientConfig::builder()
+    let mut client_config = ClientConfig::builder()
         .with_root_certificates(root_cert_store)
         .with_no_client_auth();
+    client_config.alpn_protocols.push(b"h2".to_vec());
+    client_config.alpn_protocols.dedup();
     let auth = Auth::new(token_secret, None)?;
 
     HyperConnector::new(

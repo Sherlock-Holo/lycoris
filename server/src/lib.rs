@@ -37,9 +37,12 @@ pub async fn run() -> Result<(), Error> {
 
     let certs = load_certs(&config.cert).await?;
     let key = load_key(&config.key).await?;
-    let server_config = ServerConfig::builder()
+    let mut server_config = ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(certs, key)?;
+
+    server_config.alpn_protocols.push(b"h2".to_vec());
+    server_config.alpn_protocols.dedup();
 
     let tcp_listener = TcpListener::listen_mptcp(config.listen_addr).await?;
 
