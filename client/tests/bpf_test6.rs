@@ -1,16 +1,19 @@
 use std::any::Any;
 use std::env;
 use std::ffi::OsStr;
+use std::io;
 use std::net::{SocketAddrV4, SocketAddrV6};
 use std::path::Path;
 use std::str::FromStr;
 
 use aya::maps::Array;
 use aya::maps::lpm_trie::{Key, LpmTrie};
+use aya::programs::CgroupAttachMode;
 use aya::programs::cgroup_sock_addr::CgroupSockAddrLink;
 use aya::programs::{CgroupSockAddr, SockOps};
-use aya::{Bpf, BpfLoader};
-use aya_log::BpfLogger;
+use aya::util::KernelVersion;
+use aya::{Ebpf, EbpfLoader};
+use aya_log::EbpfLogger;
 use cidr::Ipv6Inet;
 use lycoris_client::bpf_map_name::*;
 use lycoris_client::bpf_share::{Ipv4Addr, Ipv6Addr};
@@ -53,21 +56,23 @@ async fn main() {
     let listen_addr = SocketAddrV4::from_str(TEST_LISTEN_ADDR).unwrap();
     let listen_addr_v6 = SocketAddrV6::from_str(TEST_LISTEN_ADDR_V6).unwrap();
 
-    let mut bpf = BpfLoader::new()
+    let mut ebpf = EbpfLoader::new()
         .allow_unsupported_maps()
         .load_file(BPF_ELF)
         .unwrap();
 
-    init_bpf_log(&mut bpf);
+    init_bpf_log(&mut ebpf);
 
-    set_proxy_addr(&mut bpf, listen_addr, listen_addr_v6);
-    set_proxy_ip_list_mode(&mut bpf);
-    load_target_ip(&mut bpf);
+    set_proxy_addr(&mut ebpf, listen_addr, listen_addr_v6);
+    set_proxy_ip_list_mode(&mut ebpf);
+    load_target_ip(&mut ebpf);
 
-    let _connect6_link = load_connect6(&mut bpf, Path::new(CGROUP_PATH)).await;
-    let _getsockname_link = load_getsockname6(&mut bpf, Path::new(CGROUP_PATH)).await;
-    let _getpeername6 = load_getpeername6(&mut bpf, Path::new(CGROUP_PATH)).await;
-    let _sockops_link = load_established_sockops(&mut bpf, Path::new(CGROUP_PATH)).await;
+    let attach_mode = get_attach_mode().unwrap();
+    let _connect6_link = load_connect6(&mut ebpf, Path::new(CGROUP_PATH), attach_mode).await;
+    let _getsockname_link = load_getsockname6(&mut ebpf, Path::new(CGROUP_PATH), attach_mode).await;
+    let _getpeername6 = load_getpeername6(&mut ebpf, Path::new(CGROUP_PATH), attach_mode).await;
+    let _sockops_link =
+        load_established_sockops(&mut ebpf, Path::new(CGROUP_PATH), attach_mode).await;
 
     let mut listener = load_listener(listen_addr, listen_addr_v6).await;
 
@@ -96,10 +101,14 @@ async fn load_listener(listen_addr: SocketAddrV4, listen_addr_v6: SocketAddrV6) 
         .unwrap()
 }
 
-async fn load_connect6(bpf: &mut Bpf, cgroup_path: &Path) -> OwnedLink<CgroupSockAddrLink> {
+async fn load_connect6(
+    ebpf: &mut Ebpf,
+    cgroup_path: &Path,
+    attach_mode: CgroupAttachMode,
+) -> OwnedLink<CgroupSockAddrLink> {
     let cgroup_file = File::open(cgroup_path).await.unwrap();
 
-    let connect6_prog: &mut CgroupSockAddr = bpf
+    let connect6_prog: &mut CgroupSockAddr = ebpf
         .program_mut("connect6")
         .expect("bpf connect6 not found")
         .try_into()
@@ -109,17 +118,21 @@ async fn load_connect6(bpf: &mut Bpf, cgroup_path: &Path) -> OwnedLink<CgroupSoc
 
     info!("load connect6 done");
 
-    let connect6_link_id = connect6_prog.attach(cgroup_file).unwrap();
+    let connect6_link_id = connect6_prog.attach(&cgroup_file, attach_mode).unwrap();
 
     info!(?cgroup_path, "attach cgroup done");
 
     connect6_prog.take_link(connect6_link_id).unwrap().into()
 }
 
-async fn load_getsockname6(bpf: &mut Bpf, cgroup_path: &Path) -> OwnedLink<CgroupSockAddrLink> {
+async fn load_getsockname6(
+    ebpf: &mut Ebpf,
+    cgroup_path: &Path,
+    attach_mode: CgroupAttachMode,
+) -> OwnedLink<CgroupSockAddrLink> {
     let cgroup_file = File::open(cgroup_path).await.unwrap();
 
-    let prog: &mut CgroupSockAddr = bpf
+    let prog: &mut CgroupSockAddr = ebpf
         .program_mut("getsockname6")
         .expect("bpf getsockname6 not found")
         .try_into()
@@ -129,17 +142,21 @@ async fn load_getsockname6(bpf: &mut Bpf, cgroup_path: &Path) -> OwnedLink<Cgrou
 
     info!("load getsockname6 done");
 
-    let link_id = prog.attach(cgroup_file).unwrap();
+    let link_id = prog.attach(&cgroup_file, attach_mode).unwrap();
 
     info!(?cgroup_path, "attach cgroup done");
 
     prog.take_link(link_id).unwrap().into()
 }
 
-async fn load_getpeername6(bpf: &mut Bpf, cgroup_path: &Path) -> OwnedLink<CgroupSockAddrLink> {
+async fn load_getpeername6(
+    ebpf: &mut Ebpf,
+    cgroup_path: &Path,
+    attach_mode: CgroupAttachMode,
+) -> OwnedLink<CgroupSockAddrLink> {
     let cgroup_file = File::open(cgroup_path).await.unwrap();
 
-    let prog: &mut CgroupSockAddr = bpf
+    let prog: &mut CgroupSockAddr = ebpf
         .program_mut("getpeername6")
         .expect("bpf getpeername6 not found")
         .try_into()
@@ -149,18 +166,21 @@ async fn load_getpeername6(bpf: &mut Bpf, cgroup_path: &Path) -> OwnedLink<Cgrou
 
     info!("load getpeername6 done");
 
-    let link_id = prog.attach(cgroup_file).unwrap();
+    let link_id = prog.attach(&cgroup_file, attach_mode).unwrap();
 
     info!(?cgroup_path, "attach cgroup done");
 
     prog.take_link(link_id).unwrap().into()
 }
 
-// return Box<dyn Any> because the SockOpsLink is un-exported
-async fn load_established_sockops(bpf: &mut Bpf, cgroup_path: &Path) -> Box<dyn Any> {
+async fn load_established_sockops(
+    ebpf: &mut Ebpf,
+    cgroup_path: &Path,
+    attach_mode: CgroupAttachMode,
+) -> Box<dyn Any> {
     let cgroup_file = File::open(cgroup_path).await.unwrap();
 
-    let prog: &mut SockOps = bpf
+    let prog: &mut SockOps = ebpf
         .program_mut("established_connect")
         .expect("bpf established_connect not found")
         .try_into()
@@ -170,15 +190,15 @@ async fn load_established_sockops(bpf: &mut Bpf, cgroup_path: &Path) -> Box<dyn 
 
     info!("loaded established_connect done");
 
-    let link_id = prog.attach(cgroup_file).unwrap();
+    let link_id = prog.attach(&cgroup_file, attach_mode).unwrap();
 
     info!("attach established_connect done");
 
     Box::new(OwnedLink::from(prog.take_link(link_id).unwrap()))
 }
 
-fn load_target_ip(bpf: &mut Bpf) {
-    let mut proxy_ipv6_list: LpmTrie<_, [u8; 16], u8> = bpf
+fn load_target_ip(ebpf: &mut Ebpf) {
+    let mut proxy_ipv6_list: LpmTrie<_, [u8; 16], u8> = ebpf
         .map_mut(PROXY_IPV6_LIST)
         .expect("PROXY_IPV6_LIST not found")
         .try_into()
@@ -198,8 +218,8 @@ fn load_target_ip(bpf: &mut Bpf) {
         .unwrap();
 }
 
-fn set_proxy_addr(bpf: &mut Bpf, addr: SocketAddrV4, addr_v6: SocketAddrV6) {
-    let mut proxy_server: Array<_, Ipv4Addr> = bpf
+fn set_proxy_addr(ebpf: &mut Ebpf, addr: SocketAddrV4, addr_v6: SocketAddrV6) {
+    let mut proxy_server: Array<_, Ipv4Addr> = ebpf
         .map_mut(PROXY_IPV4_CLIENT)
         .expect("PROXY_IPV4_CLIENT bpf array not found")
         .try_into()
@@ -213,7 +233,7 @@ fn set_proxy_addr(bpf: &mut Bpf, addr: SocketAddrV4, addr_v6: SocketAddrV6) {
 
     proxy_server.set(0, proxy_addr, 0).unwrap();
 
-    let mut v6_proxy_server: Array<_, Ipv6Addr> = bpf
+    let mut v6_proxy_server: Array<_, Ipv6Addr> = ebpf
         .map_mut(PROXY_IPV6_CLIENT)
         .expect("PROXY_IPV6_CLIENT bpf array not found")
         .try_into()
@@ -227,8 +247,8 @@ fn set_proxy_addr(bpf: &mut Bpf, addr: SocketAddrV4, addr_v6: SocketAddrV6) {
     v6_proxy_server.set(0, proxy_addr, 0).unwrap();
 }
 
-fn set_proxy_ip_list_mode(bpf: &mut Bpf) {
-    let mut proxy_list_mode: Array<_, u8> = bpf
+fn set_proxy_ip_list_mode(ebpf: &mut Ebpf) {
+    let mut proxy_list_mode: Array<_, u8> = ebpf
         .map_mut(PROXY_LIST_MODE)
         .expect("PROXY_LIST_MODE not found")
         .try_into()
@@ -237,8 +257,16 @@ fn set_proxy_ip_list_mode(bpf: &mut Bpf) {
     proxy_list_mode.set(0, 1u8, 0).unwrap();
 }
 
-fn init_bpf_log(bpf: &mut Bpf) {
+fn init_bpf_log(ebpf: &mut Ebpf) {
     LogTracer::builder().ignore_crate("rustls").init().unwrap();
 
-    BpfLogger::init(bpf).unwrap();
+    let _ = EbpfLogger::init(ebpf);
+}
+
+fn get_attach_mode() -> io::Result<CgroupAttachMode> {
+    if KernelVersion::current().map_err(io::Error::other)? >= KernelVersion::new(5, 7, 0) {
+        Ok(CgroupAttachMode::Single)
+    } else {
+        Ok(CgroupAttachMode::AllowMultiple)
+    }
 }
