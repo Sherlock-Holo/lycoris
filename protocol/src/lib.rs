@@ -2,7 +2,7 @@ use std::convert::Infallible;
 use std::io::IoSlice;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::pin::Pin;
-use std::task::{ready, Context, Poll};
+use std::task::{Context, Poll, ready};
 use std::{io, slice};
 
 pub use accept::{HyperAcceptor, HyperListener};

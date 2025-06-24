@@ -1,6 +1,7 @@
 #![feature(impl_trait_in_assoc_type, gen_blocks, async_iterator)]
 
 use std::ffi::CString;
+use std::io;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6};
 use std::path::Path;
 use std::str::FromStr;
@@ -8,9 +9,10 @@ use std::str::FromStr;
 use aya::maps::Array;
 use aya::maps::lpm_trie::{Key, LpmTrie};
 use aya::programs::cgroup_sock_addr::CgroupSockAddrLink;
-use aya::programs::{CgroupSockAddr, Link, SockOps};
-use aya::{Bpf, BpfLoader, maps};
-use aya_log::BpfLogger;
+use aya::programs::{CgroupAttachMode, CgroupSockAddr, Link, SockOps};
+use aya::util::KernelVersion;
+use aya::{Ebpf, EbpfLoader, maps};
+use aya_log::EbpfLogger;
 use cidr::{Ipv4Inet, Ipv6Inet};
 use clap::Parser;
 use futures_rustls::rustls::{ClientConfig, RootCertStore};
@@ -67,17 +69,17 @@ async fn run_bpf(args: Args, config: Config) -> anyhow::Result<()> {
 
     info!(?remote_domain_ips, "get remote domain ip done");
 
-    let mut bpf = BpfLoader::new()
+    let mut ebpf = EbpfLoader::new()
         // allow bpf elf contains sk_storage bpf map
         .allow_unsupported_maps()
         .load_file(&args.bpf_elf)?;
 
     info!("load bpf done");
 
-    init_bpf_log(&mut bpf);
+    init_bpf_log(&mut ebpf);
 
     set_proxy_addr(
-        &mut bpf,
+        &mut ebpf,
         config.listen_addr,
         config.listen_addr_v6,
         config.container_bridge_listen_addr,
@@ -86,19 +88,19 @@ async fn run_bpf(args: Args, config: Config) -> anyhow::Result<()> {
 
     info!(listen_addr = %config.listen_addr, "set proxy addr done");
 
-    set_proxy_ip_list(&mut bpf, config.ip_list.iter().map(|path| path.as_path())).await?;
+    set_proxy_ip_list(&mut ebpf, config.ip_list.iter().map(|path| path.as_path())).await?;
 
     info!("set target ip done");
 
-    set_proxy_ip_list_mode(&mut bpf, config.ip_in_list_directly)?;
+    set_proxy_ip_list_mode(&mut ebpf, config.ip_in_list_directly)?;
     set_command_list(
-        &mut bpf,
+        &mut ebpf,
         config.command_list,
         config.command_in_list_directly,
     )?;
 
     if config.ip_in_list_directly {
-        append_remote_ip_list(&mut bpf, &remote_domain_ips)?;
+        append_remote_ip_list(&mut ebpf, &remote_domain_ips)?;
     }
 
     info!(
@@ -106,19 +108,21 @@ async fn run_bpf(args: Args, config: Config) -> anyhow::Result<()> {
         "set proxy ip list mode done"
     );
 
-    let _connect4_link = load_connect4(&mut bpf, &config.cgroup_path).await?;
+    let attach_mode = get_attach_mode()?;
+
+    let _connect4_link = load_connect4(&mut ebpf, attach_mode, &config.cgroup_path).await?;
 
     info!("load connect4 done");
 
-    let _connect6_link = load_connect6(&mut bpf, &config.cgroup_path).await?;
+    let _connect6_link = load_connect6(&mut ebpf, attach_mode, &config.cgroup_path).await?;
 
-    let _getsockname4 = load_getsockname4(&mut bpf, &config.cgroup_path).await?;
-    let _getsockname6 = load_getsockname6(&mut bpf, &config.cgroup_path).await?;
+    let _getsockname4 = load_getsockname4(&mut ebpf, attach_mode, &config.cgroup_path).await?;
+    let _getsockname6 = load_getsockname6(&mut ebpf, attach_mode, &config.cgroup_path).await?;
 
-    let _getpeername4 = load_getpeername4(&mut bpf, &config.cgroup_path).await?;
-    let _getpeername6 = load_getpeername6(&mut bpf, &config.cgroup_path).await?;
+    let _getpeername4 = load_getpeername4(&mut ebpf, attach_mode, &config.cgroup_path).await?;
+    let _getpeername6 = load_getpeername6(&mut ebpf, attach_mode, &config.cgroup_path).await?;
 
-    let _sockops_link = load_sockops(&mut bpf, &config.cgroup_path).await?;
+    let _sockops_link = load_sockops(&mut ebpf, attach_mode, &config.cgroup_path).await?;
 
     info!("load sockops done");
 
@@ -149,7 +153,8 @@ async fn run_bpf(args: Args, config: Config) -> anyhow::Result<()> {
 }
 
 async fn load_connect4(
-    bpf: &mut Bpf,
+    bpf: &mut Ebpf,
+    attach_mode: CgroupAttachMode,
     cgroup_path: &Path,
 ) -> anyhow::Result<OwnedLink<CgroupSockAddrLink>> {
     let cgroup_file = File::open(cgroup_path).await?;
@@ -163,7 +168,7 @@ async fn load_connect4(
 
     info!("load connect4 done");
 
-    let connect4_link_id = connect4_prog.attach(cgroup_file)?;
+    let connect4_link_id = connect4_prog.attach(cgroup_file, attach_mode)?;
 
     info!(?cgroup_path, "attach cgroup done");
 
@@ -171,7 +176,8 @@ async fn load_connect4(
 }
 
 async fn load_connect6(
-    bpf: &mut Bpf,
+    bpf: &mut Ebpf,
+    attach_mode: CgroupAttachMode,
     cgroup_path: &Path,
 ) -> anyhow::Result<OwnedLink<CgroupSockAddrLink>> {
     let cgroup_file = File::open(cgroup_path).await?;
@@ -185,7 +191,7 @@ async fn load_connect6(
 
     info!("load connect6 done");
 
-    let connect6_link_id = connect6_prog.attach(cgroup_file)?;
+    let connect6_link_id = connect6_prog.attach(cgroup_file, attach_mode)?;
 
     info!(?cgroup_path, "attach cgroup done");
 
@@ -193,7 +199,8 @@ async fn load_connect6(
 }
 
 async fn load_getsockname4(
-    bpf: &mut Bpf,
+    bpf: &mut Ebpf,
+    attach_mode: CgroupAttachMode,
     cgroup_path: &Path,
 ) -> anyhow::Result<OwnedLink<CgroupSockAddrLink>> {
     let cgroup_file = File::open(cgroup_path).await?;
@@ -207,7 +214,7 @@ async fn load_getsockname4(
 
     info!("load getsockname4 done");
 
-    let link_id = prog.attach(cgroup_file)?;
+    let link_id = prog.attach(cgroup_file, attach_mode)?;
 
     info!(?cgroup_path, "attach cgroup done");
 
@@ -215,7 +222,8 @@ async fn load_getsockname4(
 }
 
 async fn load_getsockname6(
-    bpf: &mut Bpf,
+    bpf: &mut Ebpf,
+    attach_mode: CgroupAttachMode,
     cgroup_path: &Path,
 ) -> anyhow::Result<OwnedLink<CgroupSockAddrLink>> {
     let cgroup_file = File::open(cgroup_path).await?;
@@ -229,7 +237,7 @@ async fn load_getsockname6(
 
     info!("load getsockname6 done");
 
-    let link_id = prog.attach(cgroup_file)?;
+    let link_id = prog.attach(cgroup_file, attach_mode)?;
 
     info!(?cgroup_path, "attach cgroup done");
 
@@ -237,7 +245,8 @@ async fn load_getsockname6(
 }
 
 async fn load_getpeername4(
-    bpf: &mut Bpf,
+    bpf: &mut Ebpf,
+    attach_mode: CgroupAttachMode,
     cgroup_path: &Path,
 ) -> anyhow::Result<OwnedLink<CgroupSockAddrLink>> {
     let cgroup_file = File::open(cgroup_path).await?;
@@ -251,7 +260,7 @@ async fn load_getpeername4(
 
     info!("load getpeername4 done");
 
-    let link_id = prog.attach(cgroup_file)?;
+    let link_id = prog.attach(cgroup_file, attach_mode)?;
 
     info!(?cgroup_path, "attach cgroup done");
 
@@ -259,7 +268,8 @@ async fn load_getpeername4(
 }
 
 async fn load_getpeername6(
-    bpf: &mut Bpf,
+    bpf: &mut Ebpf,
+    attach_mode: CgroupAttachMode,
     cgroup_path: &Path,
 ) -> anyhow::Result<OwnedLink<CgroupSockAddrLink>> {
     let cgroup_file = File::open(cgroup_path).await?;
@@ -273,7 +283,7 @@ async fn load_getpeername6(
 
     info!("load getpeername6 done");
 
-    let link_id = prog.attach(cgroup_file)?;
+    let link_id = prog.attach(cgroup_file, attach_mode)?;
 
     info!(?cgroup_path, "attach cgroup done");
 
@@ -281,7 +291,11 @@ async fn load_getpeername6(
 }
 
 // return OwnedLink<impl Link> because the SockOpsLink is un-exported
-async fn load_sockops(bpf: &mut Bpf, cgroup_path: &Path) -> anyhow::Result<OwnedLink<impl Link>> {
+async fn load_sockops(
+    bpf: &mut Ebpf,
+    attach_mode: CgroupAttachMode,
+    cgroup_path: &Path,
+) -> anyhow::Result<OwnedLink<impl Link>> {
     let cgroup_file = File::open(cgroup_path).await?;
 
     let prog: &mut SockOps = bpf
@@ -293,7 +307,7 @@ async fn load_sockops(bpf: &mut Bpf, cgroup_path: &Path) -> anyhow::Result<Owned
 
     info!("loaded established_connect done");
 
-    let link_id = prog.attach(cgroup_file).unwrap();
+    let link_id = prog.attach(cgroup_file, attach_mode)?;
 
     info!("attach established_connect done");
 
@@ -301,7 +315,7 @@ async fn load_sockops(bpf: &mut Bpf, cgroup_path: &Path) -> anyhow::Result<Owned
 }
 
 fn set_proxy_addr(
-    bpf: &mut Bpf,
+    bpf: &mut Ebpf,
     mut addr: SocketAddrV4,
     mut addr_v6: SocketAddrV6,
     container_bridge_listen_addr: Option<SocketAddrV4>,
@@ -387,7 +401,11 @@ async fn load_connector(
     token_header: String,
 ) -> anyhow::Result<HyperConnector> {
     let mut root_cert_store = RootCertStore::empty();
-    for cert in rustls_native_certs::load_native_certs()? {
+    let mut res = rustls_native_certs::load_native_certs();
+    if let Some(err) = res.errors.pop() {
+        return Err(err.into());
+    }
+    for cert in res.certs {
         root_cert_store.add(cert)?;
     }
 
@@ -417,7 +435,7 @@ async fn load_connector(
 }
 
 async fn set_proxy_ip_list<'a, I: Iterator<Item = &'a Path>>(
-    bpf: &mut Bpf,
+    bpf: &mut Ebpf,
     ip_list_paths: I,
 ) -> anyhow::Result<()> {
     for ip_list_path in ip_list_paths {
@@ -483,7 +501,7 @@ async fn set_proxy_ip_list<'a, I: Iterator<Item = &'a Path>>(
     Ok(())
 }
 
-fn append_remote_ip_list(bpf: &mut Bpf, remote_domain_ip: &[IpAddr]) -> anyhow::Result<()> {
+fn append_remote_ip_list(bpf: &mut Ebpf, remote_domain_ip: &[IpAddr]) -> anyhow::Result<()> {
     let mut proxy_ipv4_list: LpmTrie<_, [u8; 4], u8> = bpf
         .map_mut(PROXY_IPV4_LIST)
         .expect("PROXY_IPV4_LIST not found")
@@ -502,7 +520,7 @@ fn append_remote_ip_list(bpf: &mut Bpf, remote_domain_ip: &[IpAddr]) -> anyhow::
     Ok(())
 }
 
-fn set_proxy_ip_list_mode(bpf: &mut Bpf, ip_in_list_directly: bool) -> anyhow::Result<()> {
+fn set_proxy_ip_list_mode(bpf: &mut Ebpf, ip_in_list_directly: bool) -> anyhow::Result<()> {
     let mut proxy_list_mode: Array<_, u8> = bpf
         .map_mut(PROXY_LIST_MODE)
         .expect("PROXY_LIST_MODE not found")
@@ -516,7 +534,7 @@ fn set_proxy_ip_list_mode(bpf: &mut Bpf, ip_in_list_directly: bool) -> anyhow::R
 }
 
 fn set_command_list(
-    bpf: &mut Bpf,
+    bpf: &mut Ebpf,
     commands: Vec<String>,
     command_in_list_directly: bool,
 ) -> anyhow::Result<()> {
@@ -589,8 +607,16 @@ async fn get_remote_domain_ips(domain: &str) -> anyhow::Result<Vec<IpAddr>> {
         .collect())
 }
 
-fn init_bpf_log(bpf: &mut Bpf) {
+fn init_bpf_log(bpf: &mut Ebpf) {
     LogTracer::builder().ignore_crate("rustls").init().unwrap();
 
-    BpfLogger::init(bpf).unwrap();
+    let _ = EbpfLogger::init(bpf);
+}
+
+fn get_attach_mode() -> io::Result<CgroupAttachMode> {
+    if KernelVersion::current().map_err(io::Error::other)? >= KernelVersion::new(5, 7, 0) {
+        Ok(CgroupAttachMode::Single)
+    } else {
+        Ok(CgroupAttachMode::AllowMultiple)
+    }
 }

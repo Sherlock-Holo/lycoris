@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Formatter};
 
-use totp_rs::{Algorithm, TotpUrlError, TOTP};
+use totp_rs::{Algorithm, TOTP, TotpUrlError};
 
 pub struct Auth {
     totp: TOTP,

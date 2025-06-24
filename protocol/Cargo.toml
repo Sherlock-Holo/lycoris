@@ -1,12 +1,12 @@
 [package]
 name = "protocol"
-version = "0.2.0"
-edition = "2021"
+version = "0.2.1"
+edition = "2024"
 
 [dependencies]
 bytes = { workspace = true }
+flume = { workspace = true }
 futures-util = { workspace = true, features = ["io", "sink"] }
-futures-channel = { workspace = true, features = ["sink"] }
 futures-rustls = { workspace = true, features = ["early-data"] }
 http = { workspace = true }
 http-body-util = { workspace = true }

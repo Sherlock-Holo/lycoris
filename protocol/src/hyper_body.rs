@@ -1,10 +1,11 @@
 use std::io;
 use std::io::ErrorKind;
 use std::pin::Pin;
-use std::task::{ready, Context, Poll};
+use std::task::{Context, Poll, ready};
 
 use bytes::Bytes;
-use futures_channel::mpsc::Sender;
+use flume::Sender;
+use flume::r#async::SendSink;
 use futures_util::{Sink, SinkExt, Stream};
 use http::HeaderMap;
 use hyper::body::{Body, Frame, Incoming};
@@ -39,26 +40,28 @@ impl Stream for BodyStream {
 }
 
 #[derive(Debug)]
-pub struct SinkBodySender<E> {
-    sender: Sender<Result<Frame<Bytes>, E>>,
+pub struct SinkBodySender<E: 'static> {
+    sender: SendSink<'static, Result<Frame<Bytes>, E>>,
     is_trailer_sent: bool,
 }
 
 impl<E> From<Sender<Result<Frame<Bytes>, E>>> for SinkBodySender<E> {
     fn from(value: Sender<Result<Frame<Bytes>, E>>) -> Self {
         Self {
-            sender: value,
+            sender: value.into_sink(),
             is_trailer_sent: false,
         }
     }
 }
 
-impl<'a, E> Sink<&'a [u8]> for SinkBodySender<E> {
+impl<'a, E: 'static + Send + Sync> Sink<&'a [u8]> for SinkBodySender<E> {
     type Error = io::Error;
 
     #[inline]
     fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.sender.poll_ready(cx).map_err(io::Error::other)
+        Pin::new(&mut self.sender)
+            .poll_ready(cx)
+            .map_err(io::Error::other)
     }
 
     #[inline]

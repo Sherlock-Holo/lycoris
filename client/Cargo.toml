@@ -1,6 +1,6 @@
 [package]
 name = "lycoris-client"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2024"
 license = "MIT"
 
@@ -8,15 +8,10 @@ license = "MIT"
 
 [dependencies]
 anyhow = { workspace = true }
-bytes = { workspace = true }
 cidr = { workspace = true }
 clap = { workspace = true, features = ["derive", "color", "suggestions"] }
 hickory-resolver = { workspace = true, features = ["default", "system-config"] }
-http = { workspace = true }
-hyper = { workspace = true, features = ["http2", "client"] }
 hyper-util = { workspace = true, features = ["client-legacy", "http2", "tokio"] }
-http-body-util = { workspace = true }
-futures-channel = { workspace = true, features = ["sink"] }
 futures-rustls = { workspace = true }
 futures-util = { workspace = true, features = ["io"] }
 libc = { workspace = true }
@@ -36,10 +31,9 @@ protocol = { path = "../protocol" }
 share = { path = "../share" }
 
 # bpf
-aya = { version = "0.12", features = ["async_tokio"] }
+aya = { version = "0.13.1", features = ["async_tokio"] }
 aya-log = "0.2"
 tracing-log = "0.2"
 
 [dev-dependencies]
-rustix = { version = "0.38", features = ["process"] }
-h2 = { version = "0.4", features = ["stream"] }
+rustix = { version = "1.0.7", features = ["process"] }

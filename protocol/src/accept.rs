@@ -1,17 +1,18 @@
 use std::convert::Infallible;
+use std::fmt::Debug;
 use std::future::Future;
 use std::io::ErrorKind;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
-use std::pin::Pin;
+use std::pin::{Pin, pin};
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use std::{io, mem};
+use std::{error, io, mem};
 
 use bytes::{Buf, Bytes};
-use futures_channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use flume::r#async::RecvStream;
 pub use futures_rustls::rustls::ServerConfig;
 use futures_util::future::BoxFuture;
-use futures_util::{AsyncRead, AsyncWrite, Stream, TryStreamExt};
+use futures_util::{AsyncRead, AsyncWrite, Sink, SinkExt, Stream, TryStreamExt};
 use http::{Request, Response, StatusCode, Version};
 use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt, Empty, StreamBody};
@@ -121,7 +122,7 @@ where
             dns_resolver,
         } = self;
 
-        let (acceptor_tx, acceptor_rx) = mpsc::unbounded();
+        let (acceptor_tx, acceptor_rx) = flume::bounded(10);
         let builder = Arc::new(builder);
         let handler = Arc::new(HyperServerHandler { token_header, auth });
 
@@ -150,7 +151,11 @@ where
                             let acceptor_tx = acceptor_tx.clone();
                             let dns_resolver = dns_resolver.clone();
 
-                            async move { handler.handle(req, acceptor_tx, dns_resolver).await }
+                            async move {
+                                handler
+                                    .handle(req, acceptor_tx.into_sink(), dns_resolver)
+                                    .await
+                            }
                         }),
                     );
 
@@ -164,7 +169,7 @@ where
         (
             ListenTask { fut },
             HyperAcceptor {
-                receiver: acceptor_rx,
+                receiver: acceptor_rx.into_stream(),
             },
         )
     }
@@ -174,7 +179,7 @@ pub type AcceptorResult = (Vec<SocketAddr>, Writer, Reader);
 
 #[derive(Debug)]
 pub struct HyperAcceptor {
-    receiver: UnboundedReceiver<AcceptorResult>,
+    receiver: RecvStream<'static, AcceptorResult>,
 }
 
 impl Stream for HyperAcceptor {
@@ -193,12 +198,16 @@ struct HyperServerHandler {
 
 impl HyperServerHandler {
     #[instrument(skip(dns_resolver))]
-    async fn handle<D: DnsResolver>(
+    async fn handle<D, S>(
         &self,
         request: Request<Incoming>,
-        result_tx: UnboundedSender<AcceptorResult>,
+        result_tx: S,
         dns_resolver: D,
-    ) -> Result<Response<BoxBody<Bytes, Infallible>>, Error> {
+    ) -> Result<Response<BoxBody<Bytes, Infallible>>, Error>
+    where
+        D: DnsResolver,
+        S: Sink<AcceptorResult, Error: error::Error + Send + Sync + 'static> + Debug,
+    {
         if request.version() != Version::HTTP_2 {
             error!("reject not http2 request");
 
@@ -233,17 +242,18 @@ impl HyperServerHandler {
 
         info!(?addrs, "get remote addrs done");
 
-        let (body_tx, body_rx) = mpsc::channel(1);
-        let response = Response::new(StreamBody::new(body_rx).boxed());
+        let (body_tx, body_rx) = flume::bounded(1);
+        let response = Response::new(StreamBody::new(body_rx.into_stream()).boxed());
         let stream_reader = StreamReader::new(BodyStream::from(body));
         let sink_body_sender = SinkBodySender::from(body_tx);
 
-        result_tx
-            .unbounded_send((
+        pin!(result_tx)
+            .send((
                 addrs,
                 Writer(SinkWriter::new(sink_body_sender)),
                 Reader(stream_reader),
             ))
+            .await
             .map_err(|err| Error::Other(err.into()))?;
 
         Ok(response)
@@ -343,7 +353,7 @@ pub enum Error {
     AddrDomainInvalid,
 
     #[error(transparent)]
-    Other(Box<dyn std::error::Error + Send + Sync + 'static>),
+    Other(Box<dyn error::Error + Send + Sync + 'static>),
 }
 
 /// Parse addr from data

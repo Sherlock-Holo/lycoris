@@ -6,12 +6,8 @@ edition = "2024"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bytes = { workspace = true }
-futures-channel = { workspace = true, features = ["sink"] }
 futures-util = { workspace = true, features = ["io", "sink"] }
 hickory-resolver = { workspace = true, features = ["default", "system-config"] }
-http = { workspace = true }
-hyper = { workspace = true }
 hyper-util = { workspace = true, features = ["client-legacy", "http2", "tokio"] }
 tap = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "io-util", "net"] }

@@ -7,19 +7,18 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use bytes::Bytes;
-use futures_channel::mpsc;
+use futures_rustls::TlsConnector;
 use futures_rustls::pki_types::{DnsName, ServerName};
 pub use futures_rustls::rustls::ClientConfig;
-use futures_rustls::TlsConnector;
 use futures_util::future::BoxFuture;
-use futures_util::{stream, AsyncRead, AsyncWrite, SinkExt, Stream, TryStreamExt};
+use futures_util::{AsyncRead, AsyncWrite, Stream, TryStreamExt, stream};
 use http::{Request, StatusCode, Uri, Version};
-use http_body_util::combinators::BoxBody;
 use http_body_util::StreamBody;
+use http_body_util::combinators::BoxBody;
 use hyper::body::Frame;
 use hyper::rt::Timer;
-use hyper_util::client::legacy::connect::Connection;
 use hyper_util::client::legacy::Client;
+use hyper_util::client::legacy::connect::Connection;
 use tokio_util::io::{SinkWriter, StreamReader};
 use tower_service::Service;
 use tracing::{error, info, instrument};
@@ -118,9 +117,9 @@ impl<DR: DnsResolver + Sync + 'static, TC: TcpConnector + Sync + 'static> HyperC
         let token = self.inner.token_generator.generate_token();
         let remote_addr_data = remote_addr.encode();
 
-        let (mut req_body_tx, req_body_rx) = mpsc::channel(1);
+        let (req_body_tx, req_body_rx) = flume::bounded(1);
         req_body_tx
-            .send(Ok(Frame::data(remote_addr_data)))
+            .send_async(Ok(Frame::data(remote_addr_data)))
             .await
             .expect("unbounded_send should not fail");
 
@@ -128,7 +127,7 @@ impl<DR: DnsResolver + Sync + 'static, TC: TcpConnector + Sync + 'static> HyperC
             .version(Version::HTTP_2)
             .uri(self.inner.remote_addr.clone())
             .header(&self.inner.token_header, token)
-            .body(BoxBody::new(StreamBody::new(req_body_rx)))?;
+            .body(BoxBody::new(StreamBody::new(req_body_rx.into_stream())))?;
 
         let response = self.inner.client.request(request).await?;
 
