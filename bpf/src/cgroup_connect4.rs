@@ -1,6 +1,5 @@
 use core::ffi::c_long;
 use core::ptr;
-use core::ptr::addr_of_mut;
 
 use aya_ebpf::bindings::BPF_LOCAL_STORAGE_GET_F_CREATE;
 use aya_ebpf::helpers::*;
@@ -11,7 +10,7 @@ use aya_log_ebpf::{debug, error};
 use crate::command_check::command_can_connect_directly;
 use crate::kernel_binding::require;
 use crate::map::*;
-use crate::{connect_directly, Ipv4Addr};
+use crate::{Ipv4Addr, connect_directly};
 
 /// check connect ipv4 in proxy ipv4 list or not, if in list, save the origin dst ipv4 addr into
 /// DST_IPV4_ADDR_STORE with (cookie, origin_dst_ipv4_addr), otherwise let it connect directly
@@ -101,7 +100,7 @@ pub fn handle_cgroup_connect4(ctx: SockAddrContext) -> Result<(), c_long> {
 
     unsafe {
         let ptr = bpf_sk_storage_get(
-            addr_of_mut!(CONNECT_DST_IPV4_ADDR_STORAGE) as _,
+            CONNECT_DST_IPV4_ADDR_STORAGE.get().cast(),
             (*ctx.sock_addr).__bindgen_anon_1.sk as _,
             ptr::null_mut(),
             BPF_LOCAL_STORAGE_GET_F_CREATE as _,

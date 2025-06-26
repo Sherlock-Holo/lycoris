@@ -55,7 +55,7 @@ fn handle_ipv4_connect(ctx: SockOpsContext) -> Result<(), c_long> {
         }
 
         let ptr = bpf_sk_storage_get(
-            addr_of_mut!(CONNECT_DST_IPV4_ADDR_STORAGE) as _,
+            CONNECT_DST_IPV4_ADDR_STORAGE.get().cast(),
             bpf_sk as _,
             ptr::null_mut(),
             0,

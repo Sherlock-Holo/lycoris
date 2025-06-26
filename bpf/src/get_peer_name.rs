@@ -20,7 +20,7 @@ pub fn getpeername4(ctx: SockAddrContext) -> Result<(), c_long> {
 
     unsafe {
         let ptr = bpf_sk_storage_get(
-            addr_of_mut!(CONNECT_DST_IPV4_ADDR_STORAGE) as _,
+            CONNECT_DST_IPV4_ADDR_STORAGE.get().cast(),
             sock_addr.__bindgen_anon_1.sk as _,
             ptr::null_mut(),
             0,

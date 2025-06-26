@@ -72,7 +72,8 @@ lycoris require nightly rust toolchain when build `lycoris-bpf`
 ### build dependencies
 
 - rust toolchain
-- bpf-linker(can installed by `cargo install`)
+- bpf-linker(can installed by `cargo install`) with
+  this https://github.com/aya-rs/aya/issues/1284#issuecomment-3003761949
 
 just run `cargo build --release`
 

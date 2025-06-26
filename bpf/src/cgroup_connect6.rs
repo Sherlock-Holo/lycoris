@@ -2,7 +2,7 @@ use core::ffi::c_long;
 use core::ptr::addr_of_mut;
 use core::{mem, net, ptr};
 
-use aya_ebpf::bindings::{bpf_sock_addr, BPF_LOCAL_STORAGE_GET_F_CREATE};
+use aya_ebpf::bindings::{BPF_LOCAL_STORAGE_GET_F_CREATE, bpf_sock_addr};
 use aya_ebpf::helpers::*;
 use aya_ebpf::maps::lpm_trie::Key;
 use aya_ebpf::programs::SockAddrContext;
@@ -11,7 +11,7 @@ use aya_log_ebpf::{debug, error, info};
 use crate::command_check::command_can_connect_directly;
 use crate::kernel_binding::require;
 use crate::map::*;
-use crate::{connect_directly, u16_ipv6_to_u8_ipv6, Ipv6Addr};
+use crate::{Ipv6Addr, connect_directly, u16_ipv6_to_u8_ipv6};
 
 /// check connect ipv6 in proxy ipv6 list or not, if in list, save the origin dst ipv6 addr into
 /// DST_IPV6_ADDR_STORE with (cookie, origin_dst_ipv6_addr), otherwise let it connect directly

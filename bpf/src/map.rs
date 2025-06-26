@@ -1,8 +1,9 @@
-use core::ffi::c_int;
+use core::cell::UnsafeCell;
+use core::ffi::{c_int, c_void};
 use core::ptr;
 
-use aya_ebpf::bindings::bpf_map_type::BPF_MAP_TYPE_SK_STORAGE;
 use aya_ebpf::bindings::BPF_F_NO_PREALLOC;
+use aya_ebpf::bindings::bpf_map_type::BPF_MAP_TYPE_SK_STORAGE;
 use aya_ebpf::macros::map;
 use aya_ebpf::maps::{Array, HashMap, LpmTrie, LruHashMap};
 
@@ -59,6 +60,7 @@ pub static COMM_MAP: HashMap<[u8; 16], u8> = HashMap::with_max_entries(1024, 0);
 pub static COMM_MAP_MODE: Array<u8> = Array::with_max_entries(1, 0);
 
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct SkStore<V> {
     r#type: *const [c_int; BPF_MAP_TYPE_SK_STORAGE as _],
     map_flags: *const [c_int; BPF_F_NO_PREALLOC as _],
@@ -69,44 +71,46 @@ pub struct SkStore<V> {
 
 unsafe impl<V: Sync> Sync for SkStore<V> {}
 
+#[repr(transparent)]
+#[derive(Debug)]
+pub struct SkStoreWrapper<V> {
+    value: UnsafeCell<SkStore<V>>,
+}
+
+impl<V> SkStoreWrapper<V> {
+    pub const fn new() -> Self {
+        Self {
+            value: UnsafeCell::new(SkStore {
+                r#type: ptr::null(),
+                map_flags: ptr::null(),
+                key: ptr::null(),
+                value: ptr::null(),
+                max_entries: ptr::null(),
+            }),
+        }
+    }
+
+    pub const fn get(&self) -> *mut c_void {
+        self.value.get().cast()
+    }
+}
+
+unsafe impl<V: Sync> Sync for SkStoreWrapper<V> {}
+
 // can't use UnsafeCell or SyncUnsafeCell, otherwise will report error
 // ParseError(BtfError(UnexpectedBtfType { type_id: 1 }))
-#[link_section = ".maps"]
-#[export_name = "CONNECT_DST_IPV4_ADDR_STORAGE"]
-pub static mut CONNECT_DST_IPV4_ADDR_STORAGE: SkStore<Ipv4Addr> = SkStore {
-    r#type: ptr::null(),
-    map_flags: ptr::null(),
-    key: ptr::null(),
-    value: ptr::null(),
-    max_entries: ptr::null(),
-};
+#[unsafe(link_section = ".maps")]
+#[unsafe(export_name = "CONNECT_DST_IPV4_ADDR_STORAGE")]
+pub static CONNECT_DST_IPV4_ADDR_STORAGE: SkStoreWrapper<Ipv4Addr> = SkStoreWrapper::new();
 
-#[link_section = ".maps"]
-#[export_name = "CONNECT_DST_IPV6_ADDR_STORAGE"]
-pub static mut CONNECT_DST_IPV6_ADDR_STORAGE: SkStore<Ipv6Addr> = SkStore {
-    r#type: ptr::null(),
-    map_flags: ptr::null(),
-    key: ptr::null(),
-    value: ptr::null(),
-    max_entries: ptr::null(),
-};
+#[unsafe(link_section = ".maps")]
+#[unsafe(export_name = "CONNECT_DST_IPV6_ADDR_STORAGE")]
+pub static mut CONNECT_DST_IPV6_ADDR_STORAGE: SkStoreWrapper<Ipv6Addr> = SkStoreWrapper::new();
 
-#[link_section = ".maps"]
-#[export_name = "PASSIVE_DST_IPV4_ADDR_STORAGE"]
-pub static mut PASSIVE_DST_IPV4_ADDR_STORAGE: SkStore<Ipv4Addr> = SkStore {
-    r#type: ptr::null(),
-    map_flags: ptr::null(),
-    key: ptr::null(),
-    value: ptr::null(),
-    max_entries: ptr::null(),
-};
+#[unsafe(link_section = ".maps")]
+#[unsafe(export_name = "PASSIVE_DST_IPV4_ADDR_STORAGE")]
+pub static mut PASSIVE_DST_IPV4_ADDR_STORAGE: SkStoreWrapper<Ipv4Addr> = SkStoreWrapper::new();
 
-#[link_section = ".maps"]
-#[export_name = "PASSIVE_DST_IPV6_ADDR_STORAGE"]
-pub static mut PASSIVE_DST_IPV6_ADDR_STORAGE: SkStore<Ipv6Addr> = SkStore {
-    r#type: ptr::null(),
-    map_flags: ptr::null(),
-    key: ptr::null(),
-    value: ptr::null(),
-    max_entries: ptr::null(),
-};
+#[unsafe(link_section = ".maps")]
+#[unsafe(export_name = "PASSIVE_DST_IPV6_ADDR_STORAGE")]
+pub static mut PASSIVE_DST_IPV6_ADDR_STORAGE: SkStoreWrapper<Ipv6Addr> = SkStoreWrapper::new();

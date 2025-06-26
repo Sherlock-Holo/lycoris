@@ -31,3 +31,6 @@ tower-service = "0.3"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 trait-make = "0.1"
+
+[patch.crates-io]
+aya = { git = "https://github.com/vadorovsky/aya", branch = "btf-maps-v2" }

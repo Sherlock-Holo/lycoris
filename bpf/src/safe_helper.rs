@@ -1,10 +1,10 @@
-use core::ffi::{c_long, CStr};
+use core::ffi::{CStr, c_long};
 use core::num::NonZeroUsize;
 use core::str::from_utf8_unchecked;
 
-use aya_ebpf::helpers::gen;
-use aya_log_ebpf::macro_support::DefaultFormatter;
+use aya_ebpf::helpers::r#gen;
 use aya_log_ebpf::WriteToBuf;
+use aya_log_ebpf::macro_support::DefaultFormatter;
 use unroll::unroll_for_loops;
 
 pub struct CommandStr {
@@ -48,7 +48,7 @@ impl DefaultFormatter for CommandStr {}
 /// get current comm safe helper, return nul index
 fn bpf_get_current_comm(buf: &mut [u8; 16]) -> Result<usize, c_long> {
     unsafe {
-        let res = gen::bpf_get_current_comm(buf.as_mut_ptr() as *mut _, buf.len() as _);
+        let res = r#gen::bpf_get_current_comm(buf.as_mut_ptr() as *mut _, buf.len() as _);
         if res < 0 {
             return Err(res);
         }
