@@ -65,12 +65,10 @@ async fn main() {
     set_proxy_ip_list_mode(&mut ebpf);
     load_target_ip(&mut ebpf);
 
-    let attach_mode = get_attach_mode().unwrap();
-    let _connect4_link = load_connect4(&mut ebpf, Path::new(CGROUP_PATH), attach_mode).await;
-    let _getsockname_link = load_getsockname4(&mut ebpf, Path::new(CGROUP_PATH), attach_mode).await;
-    let _getpeername4 = load_getpeername4(&mut ebpf, Path::new(CGROUP_PATH), attach_mode).await;
-    let _sockops_link =
-        load_established_sockops(&mut ebpf, Path::new(CGROUP_PATH), attach_mode).await;
+    let _connect4_link = load_connect4(&mut ebpf, Path::new(CGROUP_PATH)).await;
+    let _getsockname_link = load_getsockname4(&mut ebpf, Path::new(CGROUP_PATH)).await;
+    let _getpeername4 = load_getpeername4(&mut ebpf, Path::new(CGROUP_PATH)).await;
+    let _sockops_link = load_established_sockops(&mut ebpf, Path::new(CGROUP_PATH)).await;
 
     let mut listener = load_listener(listen_addr, listen_addr_v6).await;
 
@@ -99,11 +97,7 @@ async fn load_listener(listen_addr: SocketAddrV4, listen_addr_v6: SocketAddrV6) 
         .unwrap()
 }
 
-async fn load_connect4(
-    bpf: &mut Ebpf,
-    cgroup_path: &Path,
-    attach_mode: CgroupAttachMode,
-) -> OwnedLink<CgroupSockAddrLink> {
+async fn load_connect4(bpf: &mut Ebpf, cgroup_path: &Path) -> OwnedLink<CgroupSockAddrLink> {
     let cgroup_file = File::open(cgroup_path).await.unwrap();
 
     let connect4_prog: &mut CgroupSockAddr = bpf
@@ -116,18 +110,16 @@ async fn load_connect4(
 
     info!("load connect4 done");
 
-    let connect4_link_id = connect4_prog.attach(&cgroup_file, attach_mode).unwrap();
+    let connect4_link_id = connect4_prog
+        .attach(cgroup_file, get_attach_mode().unwrap())
+        .unwrap();
 
     info!(?cgroup_path, "attach cgroup done");
 
     connect4_prog.take_link(connect4_link_id).unwrap().into()
 }
 
-async fn load_getsockname4(
-    bpf: &mut Ebpf,
-    cgroup_path: &Path,
-    attach_mode: CgroupAttachMode,
-) -> OwnedLink<CgroupSockAddrLink> {
+async fn load_getsockname4(bpf: &mut Ebpf, cgroup_path: &Path) -> OwnedLink<CgroupSockAddrLink> {
     let cgroup_file = File::open(cgroup_path).await.unwrap();
 
     let prog: &mut CgroupSockAddr = bpf
@@ -140,18 +132,16 @@ async fn load_getsockname4(
 
     info!("load getsockname4 done");
 
-    let link_id = prog.attach(&cgroup_file, attach_mode).unwrap();
+    let link_id = prog
+        .attach(cgroup_file, get_attach_mode().unwrap())
+        .unwrap();
 
     info!(?cgroup_path, "attach cgroup done");
 
     prog.take_link(link_id).unwrap().into()
 }
 
-async fn load_getpeername4(
-    bpf: &mut Ebpf,
-    cgroup_path: &Path,
-    attach_mode: CgroupAttachMode,
-) -> OwnedLink<CgroupSockAddrLink> {
+async fn load_getpeername4(bpf: &mut Ebpf, cgroup_path: &Path) -> OwnedLink<CgroupSockAddrLink> {
     let cgroup_file = File::open(cgroup_path).await.unwrap();
 
     let prog: &mut CgroupSockAddr = bpf
@@ -164,7 +154,9 @@ async fn load_getpeername4(
 
     info!("load getpeername4 done");
 
-    let link_id = prog.attach(&cgroup_file, attach_mode).unwrap();
+    let link_id = prog
+        .attach(cgroup_file, get_attach_mode().unwrap())
+        .unwrap();
 
     info!(?cgroup_path, "attach cgroup done");
 
@@ -172,11 +164,7 @@ async fn load_getpeername4(
 }
 
 // return Box<dyn Any> because the SockOpsLink is un-exported
-async fn load_established_sockops(
-    bpf: &mut Ebpf,
-    cgroup_path: &Path,
-    attach_mode: CgroupAttachMode,
-) -> Box<dyn Any> {
+async fn load_established_sockops(bpf: &mut Ebpf, cgroup_path: &Path) -> Box<dyn Any> {
     let cgroup_file = File::open(cgroup_path).await.unwrap();
 
     let prog: &mut SockOps = bpf
@@ -189,7 +177,9 @@ async fn load_established_sockops(
 
     info!("loaded established_connect done");
 
-    let link_id = prog.attach(&cgroup_file, attach_mode).unwrap();
+    let link_id = prog
+        .attach(cgroup_file, get_attach_mode().unwrap())
+        .unwrap();
 
     info!("attach established_connect done");
 
