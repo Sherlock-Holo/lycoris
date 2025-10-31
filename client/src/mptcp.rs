@@ -40,6 +40,8 @@ impl MptcpExt for TcpStream {
             };
 
             futs.push(async move {
+                debug!("connecting to {}", addr);
+
                 if i > 0 {
                     time::sleep(Duration::from_millis(250 * i as u64)).await;
                 }
@@ -53,11 +55,23 @@ impl MptcpExt for TcpStream {
             });
         }
 
-        while let Some(res) = futs.next().await {
-            if let Ok((stream, addr)) = res {
-                debug!(%addr, "happy eyeballs connect done");
+        if futs.is_empty() {
+            error!("no mptcp addr get");
 
-                return Ok(stream);
+            return Err(io::Error::other("no mptcp addr"));
+        }
+
+        while let Some(res) = futs.next().await {
+            match res {
+                Err(err) => {
+                    warn!(%err, "connect failed");
+                }
+
+                Ok((stream, addr)) => {
+                    debug!(%addr, "happy eyeballs connect done");
+
+                    return Ok(stream);
+                }
             }
         }
 
@@ -82,7 +96,7 @@ async gen fn reorder_addrs<S: Stream<Item = io::Result<SocketAddr>>>(
             }
 
             match addrs.next().await {
-                None => return,
+                None => break,
                 Some(Err(err)) => yield Err(err),
                 Some(Ok(addr)) => {
                     if addr.is_ipv4() {
@@ -104,7 +118,7 @@ async gen fn reorder_addrs<S: Stream<Item = io::Result<SocketAddr>>>(
             }
 
             match addrs.next().await {
-                None => return,
+                None => break,
                 Some(Err(err)) => yield Err(err),
                 Some(Ok(addr)) => {
                     if addr.is_ipv6() {
@@ -120,14 +134,28 @@ async gen fn reorder_addrs<S: Stream<Item = io::Result<SocketAddr>>>(
             }
         }
     }
+
+    // yield 剩余队列中的地址
+    for addr in v6 {
+        yield Ok(addr);
+    }
+    for addr in v4 {
+        yield Ok(addr);
+    }
 }
 
-async fn connect_mptcp_addr(mut addr: SocketAddr) -> io::Result<TcpStream> {
+async fn connect_mptcp_addr(addr: SocketAddr) -> io::Result<TcpStream> {
     let ty = Type::from(SOCK_NONBLOCK | c_int::from(Type::STREAM));
-    let socket = Socket::new(Domain::IPV6, ty, Some(Protocol::MPTCP))?;
-    if let IpAddr::V4(ip) = addr.ip() {
+
+    let domain = match addr.ip() {
+        IpAddr::V4(_) => Domain::IPV4,
+        IpAddr::V6(_) => Domain::IPV6,
+    };
+
+    let socket = Socket::new(domain, ty, Some(Protocol::MPTCP))?;
+    /*if let IpAddr::V4(ip) = addr.ip() {
         addr.set_ip(ip.to_ipv6_mapped().into());
-    }
+    }*/
 
     TcpSocket::from_std_stream(socket.into())
         .connect(addr)
